@@ -169,6 +169,50 @@
            text-shadow:0 3px 0 #7a5a00; opacity:0; transform:translateY(8px); transition:opacity .3s, transform .3s; }
   .bonus.show { opacity:1; transform:translateY(0); }
   .msg { margin-top:12px; min-height:1.4em; font-size:1rem; opacity:.9; text-align:center; }
+  /* Two scenes: Scene 1 is the mole holes, Scene 2 is the bear cliff */
+  #scene1 { position:relative; width:100%; display:flex; flex-direction:column; align-items:center; }
+  #scene2 { position:relative; width:100%; min-height:100vh; }
+  .wall { position:absolute; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+  .s2-crit, .s2-tufts { position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
+  .s2-content { position:relative; z-index:3; display:flex; flex-direction:column; align-items:center; width:100%; }
+  .s2-content h1 { text-shadow:0 3px 0 #000; }
+  .s2-caves { position:relative; width:min(92vw, 420px); height:270px; margin-top:4px; }
+  .cave { position:absolute; width:74px; height:64px; margin-left:-37px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .cave-mouth { position:absolute; inset:0; overflow:hidden; background:#1c120b; }
+  .cave-sprite { position:absolute; left:9px; top:12px; width:56px; height:52px; transform:translateY(100%); pointer-events:none; }
+  .cave-sprite svg { display:block; width:100%; height:100%; }
+  .cave-sprite.hurt { animation: bearHurt .3s ease-out; }
+  @keyframes bearHurt { 0% { filter:brightness(1.8); } 100% { filter:none; } }
+  .cave-rim { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+  .s2-pop { position:absolute; transform:translateX(-50%); font-size:1.3rem; font-weight:900; color:var(--accent);
+            text-shadow:0 2px 0 #7a5a00; pointer-events:none; z-index:6; white-space:nowrap; animation: popUp .75s ease-out forwards; }
+  @keyframes popUp { from { opacity:1; margin-top:0; } to { opacity:0; margin-top:-28px; } }
+  .s2-counts { width:min(88vw, 320px); }
+  .cricket { position:absolute; width:30px; height:20px; margin-left:-15px; margin-top:-10px; }
+  .cricket svg, .s2-ant svg { display:block; width:100%; height:100%; }
+  .cricket.flying svg { animation: cflap .07s linear infinite alternate; }
+  @keyframes cflap { from { transform:scaleY(1); } to { transform:scaleY(.55); } }
+  .s2-ant { position:absolute; width:20px; height:14px; }
+  .s2-quake .wall, .s2-quake .s2-content { animation: quakeJig .08s linear infinite; }
+  @keyframes quakeJig { 0% { transform:translate(-2px,1px); } 50% { transform:translate(2px,-1px); } 100% { transform:translate(-1px,-2px); } }
+  /* Wooden signs on a bent trunk */
+  .sign { position:absolute; z-index:4; padding:8px 12px; text-align:center; font-weight:900; font-size:.95rem; color:#2e1a0b;
+          letter-spacing:.5px; border:2px solid #4a2d14; border-radius:3px; cursor:pointer; user-select:none;
+          -webkit-tap-highlight-color:transparent; box-shadow:0 3px 0 #2a1a0c, 0 8px 12px rgba(0,0,0,.45);
+          background: repeating-linear-gradient(178deg, rgba(60,35,15,.16) 0 1px, transparent 1px 6px),
+                      linear-gradient(180deg, #c39562, #a77a48 55%, #94693a); }
+  .sign::before, .sign::after { content:""; position:absolute; top:50%; margin-top:-4px; width:8px; height:8px; border-radius:50%;
+          background:radial-gradient(circle at 35% 35%, #d8d0c4, #6d6257); box-shadow:0 1px 1px rgba(0,0,0,.5); }
+  .sign::before { left:6px; }
+  .sign::after { right:6px; }
+  .sign .knot { position:absolute; left:62%; top:18%; width:12px; height:9px; border-radius:50%; background:radial-gradient(#3d2410 55%, #7a4c24); }
+  .sign .crack { position:absolute; left:30%; top:-4px; width:2px; height:110%; background:#3a2412; opacity:.6; transform:rotate(14deg); }
+  .sign span { position:relative; }
+  .sign .post { position:absolute; left:50%; top:100%; width:18px; height:70px; margin-left:-9px; z-index:-1; border-radius:9px 9px 4px 4px;
+          transform:rotate(10deg); background:linear-gradient(90deg, #4f3016, #8a5c2f 45%, #4a2c14); }
+  .sign .post::after { content:""; position:absolute; left:4px; top:40%; width:10px; height:12px; border-radius:50%; background:#3b2310; }
+  #toCaves { top:4px; right:4px; transform:rotate(-5deg); font-size:.8rem; padding:6px 10px; }
+  #toHoles { left:8px; bottom:90px; transform:rotate(4deg); }
 </style>
 </head>
 <body>
@@ -206,10 +250,11 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.21</div>
+  <div class="ver-tag">v1.22</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
+<div id="scene1">
   <h1>🔨 Whack-a-Mole</h1>
   <div class="msg" id="msg">Click the moles before they hide! Misses cost you 1 point. Watch out for blue moles!</div>
   <div class="bonus" id="bonus">+5 BONUS! 10 hits in a row</div>
@@ -244,6 +289,63 @@
     <div class="lb-status" id="lb-status"></div>
     <ol id="lb-list"></ol>
   </section>
+  <div class="sign" id="toCaves"><i class="post"></i><i class="crack"></i><i class="knot"></i><span>To Caves<svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px;margin-left:4px"><path d="M2 12 L12 2 M5 2 H12 V9" fill="none" stroke="#2e1a0b" stroke-width="2.4" stroke-linecap="round"/></svg></span></div>
+</div>
+
+<div id="scene2" style="display:none">
+  <svg class="wall" viewBox="0 0 400 1000" preserveAspectRatio="none" aria-hidden="true">
+    <defs>
+      <linearGradient id="rockG" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#6e655c"/><stop offset=".5" stop-color="#5a4f45"/><stop offset="1" stop-color="#463b31"/>
+      </linearGradient>
+      <radialGradient id="boulderG" cx=".35" cy=".3" r=".8">
+        <stop offset="0" stop-color="#a09589"/><stop offset="1" stop-color="#4b4138"/>
+      </radialGradient>
+    </defs>
+    <rect width="400" height="1000" fill="url(#rockG)"/>
+    <g fill="#8a7e72" opacity=".25">
+      <ellipse cx="60" cy="150" rx="55" ry="24"/><ellipse cx="330" cy="290" rx="48" ry="20"/>
+      <ellipse cx="120" cy="520" rx="60" ry="26"/><ellipse cx="300" cy="700" rx="52" ry="22"/>
+    </g>
+    <g fill="none" stroke="#211913" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M120 0 L134 90 L118 170 L140 260 L126 330 L150 420"/>
+      <path d="M300 60 L282 150 L300 230 L274 330"/>
+      <path d="M230 470 L252 560 L236 640 L262 720 L246 800"/>
+      <path d="M40 560 L70 640 L58 720"/>
+    </g>
+    <g fill="none" stroke="#9c9186" stroke-width="1.5" opacity=".5" stroke-linecap="round">
+      <path d="M126 96 L142 170"/><path d="M286 160 L300 232"/><path d="M240 580 L256 650"/>
+    </g>
+    <ellipse cx="70" cy="950" rx="70" ry="46" fill="url(#boulderG)"/>
+    <ellipse cx="210" cy="975" rx="92" ry="52" fill="url(#boulderG)"/>
+    <ellipse cx="335" cy="940" rx="64" ry="44" fill="url(#boulderG)"/>
+  </svg>
+  <div class="s2-crit" id="s2-crit"></div>
+  <div class="s2-tufts" id="s2-tufts"></div>
+  <div class="sign" id="toHoles"><i class="post"></i><i class="crack"></i><i class="knot"></i><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px;margin-right:4px"><path d="M12 2 L2 12 M9 12 H2 V5" fill="none" stroke="#2e1a0b" stroke-width="2.4" stroke-linecap="round"/></svg>To Holes</span></div>
+  <div class="s2-content">
+    <h1>🐻 Whack-a-Bear</h1>
+    <div class="s2-caves" id="s2-caves"></div>
+    <div class="msg" id="s2-msg">Whack each brown bear twice! Never whack the polar bear.</div>
+    <div class="counts s2-counts"><span>Hits <b id="s2-hits">0</b></span><span>Misses <b id="s2-misses">0</b></span></div>
+    <div class="hud">
+      <div>Score <b id="s2-score">0</b></div>
+      <div>Time <b id="s2-time">60</b></div>
+      <div>Best <b id="s2-best">0</b></div>
+    </div>
+    <button id="s2-start">Start Game</button>
+    <section class="lb">
+      <h2>Whack-a-Bear Leaderboard</h2>
+      <div class="lb-form" id="s2-lb-form">
+        <input id="s2-lb-name" maxlength="12" placeholder="Your name">
+        <button id="s2-lb-save">Save score</button>
+      </div>
+      <div class="lb-status" id="s2-lb-status"></div>
+      <ol id="s2-lb-list"></ol>
+    </section>
+  </div>
+  <div class="banner" id="s2-banner"><span>GAME OVER</span></div>
+</div>
 
 <script>
 (function () {
@@ -1009,6 +1111,19 @@
   }
   requestAnimationFrame(boyLoop);
 
+  // Called when switching to Scene 2: stops a round quietly (nothing is saved)
+  window.whackStop = () => {
+    if (!running) return;
+    running = false;
+    clearInterval(tickTimer);
+    clearTimeout(spawnTimer);
+    stopQuake();
+    holes.forEach((h, i) => hide(i));
+    startBtn.textContent = 'Start Game';
+    startBtn.style.display = 'inline-block';
+    msgEl.textContent = 'Round paused. Press Start to begin again.';
+  };
+
   function setScore(n) { score = n; scoreEl.textContent = score; }
 
   // Difficulty: moles stay up and spawn faster as time passes
@@ -1384,7 +1499,7 @@
   }
 
   function beginRound() {
-    if (running) return;
+    if (running || document.getElementById('scene1').style.display === 'none') return;
     running = true;
     setScore(0);
     streak = 0;
@@ -1457,6 +1572,469 @@
 
   // Stop the page from scrolling when a finger drags across the play area
   document.querySelector('.stage').addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+})();
+</script>
+
+<script>
+// ---- Scene 2: Whack-a-Bear. A rock wall with seven caves. Brown bears take two whacks; the polar bear ends the game ----
+(function () {
+  const GAME_TIME2 = 60;
+  const CAVES = [
+    { x: 16, y: 190 }, { x: 39, y: 190 }, { x: 61, y: 190 }, { x: 84, y: 190 },   // bottom row
+    { x: 27, y: 78 }, { x: 50, y: 78 }, { x: 73, y: 78 }                          // higher up
+  ];
+  const GREENS2 = ['#2e6b2a', '#4f9a3c', '#7cc15a', '#3f8a33'];
+  const $ = id => document.getElementById(id);
+  const scene1 = $('scene1'), scene2 = $('scene2');
+  const cavesEl = $('s2-caves');
+  const startBtn2 = $('s2-start'), msg2 = $('s2-msg');
+  const score2El = $('s2-score'), time2El = $('s2-time'), best2El = $('s2-best');
+  const hits2El = $('s2-hits'), misses2El = $('s2-misses');
+  const banner2 = $('s2-banner');
+  const tufts2 = $('s2-tufts'), crit2 = $('s2-crit');
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  let running2 = false, score2 = 0, hits2 = 0, misses2 = 0, timeLeft2 = GAME_TIME2, elapsed2 = 0;
+  let spawnCd = 1, quakeCd = 10, quakeLeft = 0, lastSec = -1;
+  let best2 = 0;
+  try { best2 = parseInt(localStorage.getItem('bearBest') || '0', 10) || 0; } catch (e) {}
+  best2El.textContent = best2;
+
+  // ---- Sounds (their own audio context) ----
+  let actx = null;
+  function audio2() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      actx = actx || new Ctx();
+      if (actx.state === 'suspended') actx.resume();
+      return actx;
+    } catch (e) { return null; }
+  }
+  function tone(f0, f1, dur, type, peak, delay) {
+    const c = audio2();
+    if (!c) return;
+    const t0 = c.currentTime + (delay || 0);
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(c.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.05);
+  }
+  const thump = () => tone(170, 70, 0.18, 'triangle', 0.35);
+  const bonk = () => tone(240, 120, 0.1, 'square', 0.12);
+  const roar = () => { tone(180, 55, 0.7, 'sawtooth', 0.22); tone(120, 50, 0.7, 'square', 0.08); };
+  const chirp = () => { for (let k = 0; k < 3; k++) tone(4300, 4100, 0.035, 'sine', 0.07, k * 0.09); };
+  function sadSound2() { [300, 280, 260, 200].forEach((f, i) => tone(f, f * 0.92, 0.36, 'sawtooth', 0.2, i * 0.36)); }
+  function rumble2() {
+    const c = audio2();
+    if (!c) return;
+    const dur = 3, buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 140;
+    const g = c.createGain(), t0 = c.currentTime;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.9, t0 + 0.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(lp).connect(g).connect(c.destination);
+    src.start(t0);
+    src.stop(t0 + dur);
+    tone(48, 40, dur, 'sine', 0.2);
+  }
+
+  // ---- Caves: a ragged railway-tunnel arch, a little uneven every time ----
+  function caveD() {
+    const pts = [];
+    for (let k = 0; k <= 10; k++) {
+      const a = Math.PI - k * Math.PI / 10;
+      const j = rnd(-2.2, 2.2);
+      pts.push([37 + Math.cos(a) * (30 + j), 36 - Math.sin(a) * (26 + j * 0.8)]);
+    }
+    pts.push([67 + rnd(-1.5, 1.5), 63], [7 + rnd(-1.5, 1.5), 63]);
+    return 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L') + ' Z';
+  }
+  function bearSVG(polar) {
+    const c = polar
+      ? { body: '#eef3f6', head: '#f6f9fb', ear: '#e6edf2', inner: '#cdd7de', snout: '#e2e9ee', nose: '#1a1a1a', out: '#8e9ba5', eye: '#111' }
+      : { body: '#7a4c24', head: '#8b5a2b', ear: '#6b4220', inner: '#3e2612', snout: '#c99a63', nose: '#1a1009', out: '#3e2612', eye: '#120a05' };
+    return '<svg viewBox="0 0 56 52">' +
+      `<ellipse cx="28" cy="47" rx="20" ry="9" fill="${c.body}" stroke="${c.out}" stroke-width=".8"/>` +
+      `<circle cx="12" cy="13" r="6" fill="${c.ear}" stroke="${c.out}" stroke-width=".8"/>` +
+      `<circle cx="44" cy="13" r="6" fill="${c.ear}" stroke="${c.out}" stroke-width=".8"/>` +
+      `<circle cx="12" cy="13" r="2.8" fill="${c.inner}"/><circle cx="44" cy="13" r="2.8" fill="${c.inner}"/>` +
+      `<ellipse cx="28" cy="25" rx="18" ry="16" fill="${c.head}" stroke="${c.out}" stroke-width=".8"/>` +
+      `<ellipse cx="28" cy="34" rx="9" ry="6.5" fill="${c.snout}"/>` +
+      `<ellipse cx="28" cy="30" rx="3.2" ry="2.3" fill="${c.nose}"/>` +
+      `<circle cx="21" cy="21" r="2.5" fill="${c.eye}"/><circle cx="35" cy="21" r="2.5" fill="${c.eye}"/>` +
+      `<circle cx="21.9" cy="20.1" r=".8" fill="#fff"/><circle cx="35.9" cy="20.1" r=".8" fill="#fff"/>` +
+      `<path d="M24 38 Q28 41 32 38" fill="none" stroke="${c.out}" stroke-width="1.1" stroke-linecap="round"/>` +
+      '</svg>';
+  }
+  const caves = [];
+  function buildCaves() {
+    cavesEl.innerHTML = '';
+    caves.length = 0;
+    CAVES.forEach(pos => {
+      const d = caveD();
+      const el = document.createElement('div');
+      el.className = 'cave';
+      el.style.left = pos.x + '%';
+      el.style.top = pos.y + 'px';
+      el.innerHTML =
+        `<div class="cave-mouth" style="clip-path:path('${d}')"><div class="cave-sprite"></div></div>` +
+        `<svg class="cave-rim" viewBox="0 0 74 64" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="#5f574f" stroke-width="5" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#9a9084" stroke-width="1.4" opacity=".6"/></svg>`;
+      const cave = { el, sprite: el.querySelector('.cave-sprite'), bear: null };
+      cave.sprite.style.transform = 'translateY(100%)';
+      el.addEventListener('pointerdown', () => tapCave(cave));
+      cavesEl.appendChild(el);
+      caves.push(cave);
+    });
+  }
+
+  // ---- Bears ----
+  function setDown(b) {
+    b.from = b.p == null ? 0 : b.p;
+    b.state = 'down';
+    b.t = 0;
+  }
+  function spawnBear(cave, polar) {
+    cave.bear = { polar, hp: polar ? 1 : 2, state: 'rise', t: 0, p: 100, from: 100,
+                  upDur: Math.max(0.9, 1.7 - elapsed2 / 50), dead: false };
+    cave.sprite.innerHTML = bearSVG(polar);
+    cave.sprite.classList.remove('hurt');
+    cave.sprite.style.transform = 'translateY(100%)';
+  }
+  function trySpawn2() {
+    const free = caves.filter(c => !c.bear);
+    const active = caves.length - free.length;
+    const maxActive = elapsed2 < 15 ? 2 : 3;
+    if (!free.length || active >= maxActive) return;
+    const cave = free[Math.floor(Math.random() * free.length)];
+    spawnBear(cave, elapsed2 > 12 && Math.random() < 0.12);
+  }
+  function updateBears(dt) {
+    caves.forEach(c => {
+      const b = c.bear;
+      if (!b) return;
+      b.t += dt;
+      if (b.state !== 'down' && quakeLeft > 0) setDown(b);       // the ground shakes and they go back down
+      if (b.state === 'rise' && b.t >= 0.22) { b.state = 'up'; b.t = 0; }
+      else if (b.state === 'up' && b.t >= b.upDur) setDown(b);
+      const dur = b.dead ? 0.15 : 0.22;
+      if (b.state === 'down' && b.t >= dur) {
+        c.bear = null;
+        c.sprite.style.transform = 'translateY(100%)';
+        return;
+      }
+      let p;
+      if (b.state === 'rise') p = 100 * (1 - Math.min(1, b.t / 0.22));
+      else if (b.state === 'up') p = 0;
+      else p = b.from + (100 - b.from) * Math.min(1, b.t / dur);
+      b.p = p;
+      c.sprite.style.transform = `translateY(${p.toFixed(1)}%)`;
+    });
+  }
+  function popText(cave, text) {
+    const p = document.createElement('div');
+    p.className = 's2-pop';
+    p.textContent = text;
+    p.style.left = cave.el.style.left;
+    p.style.top = (parseFloat(cave.el.style.top) - 30) + 'px';
+    cavesEl.appendChild(p);
+    setTimeout(() => p.remove(), 750);
+  }
+  function updateHud2() {
+    score2El.textContent = score2;
+    time2El.textContent = Math.max(0, Math.ceil(timeLeft2));
+    hits2El.textContent = hits2;
+    misses2El.textContent = misses2;
+  }
+  function tapCave(cave) {
+    if (!running2) return;
+    const b = cave.bear;
+    const visible = b && (b.state === 'rise' || b.state === 'up');
+    if (!visible) {
+      misses2++; score2 -= 1;
+      popText(cave, '-1');
+      bonk();
+      updateHud2();
+      return;
+    }
+    if (b.polar) { endGame2('polar'); return; }
+    hits2++;
+    b.hp--;
+    cave.sprite.classList.remove('hurt');
+    void cave.sprite.offsetWidth;
+    cave.sprite.classList.add('hurt');
+    if (b.hp > 0) {
+      score2 += 1; popText(cave, '+1'); thump();
+    } else {
+      score2 += 4; popText(cave, '+4'); roar();
+      b.dead = true;
+      setDown(b);
+    }
+    updateHud2();
+  }
+
+  // ---- Game flow ----
+  function startGame2() {
+    if (running2) return;
+    running2 = true;
+    score2 = 0; hits2 = 0; misses2 = 0; timeLeft2 = GAME_TIME2; elapsed2 = 0;
+    spawnCd = 1; quakeCd = rnd(8, 14); quakeLeft = 0; lastSec = -1;
+    caves.forEach(c => { c.bear = null; c.sprite.style.transform = 'translateY(100%)'; });
+    startBtn2.style.display = 'none';
+    msg2.textContent = 'Whack each brown bear twice! Never whack the polar bear.';
+    banner2.classList.remove('show');
+    updateHud2();
+  }
+  function endGame2(reason) {
+    if (!running2) return;
+    running2 = false;
+    quakeLeft = 0;
+    scene2.classList.remove('s2-quake');
+    caves.forEach(c => { if (c.bear && c.bear.state !== 'down') setDown(c.bear); });
+    startBtn2.style.display = '';
+    startBtn2.textContent = 'Play Again';
+    if (score2 > best2) {
+      best2 = score2;
+      try { localStorage.setItem('bearBest', String(best2)); } catch (e) {}
+    }
+    best2El.textContent = best2;
+    updateHud2();
+    buildTufts2();
+    if (reason === 'polar') {
+      msg2.textContent = 'The polar bear got you. Game over!';
+      banner2.querySelector('span').textContent = 'POLAR BEAR!';
+      banner2.classList.remove('show');
+      void banner2.offsetWidth;
+      banner2.classList.add('show');
+      sadSound2();
+    } else {
+      msg2.textContent = `Time's up! You scored ${score2}.`;
+    }
+    window.dispatchEvent(new CustomEvent('bear-gameover', { detail: { score: score2 } }));
+  }
+  startBtn2.addEventListener('click', startGame2);
+  window.bearStop = () => { if (running2) endGame2(null); };
+
+  // ---- Crickets (dark green, they chirp) and ants (which chase them) ----
+  const CRICKET_SVG = '<svg viewBox="0 0 30 20"><path d="M7 9 Q2 4 -2 1 M7 9 Q4 3 2 0" fill="none" stroke="#163a20" stroke-width="1"/>' +
+    '<path d="M11 14 L8 19 M15 15 L15 19.5 M19 14 L22 19" fill="none" stroke="#163a20" stroke-width="1.2" stroke-linecap="round"/>' +
+    '<ellipse class="wing-s" cx="15" cy="9" rx="8.5" ry="3.4" fill="#2e6b3d" opacity=".85"/>' +
+    '<ellipse cx="15" cy="11.5" rx="9" ry="5" fill="#1f4d2b"/><circle cx="6" cy="10" r="3.6" fill="#1f4d2b"/><circle cx="5" cy="9" r=".7" fill="#e8f0c8"/></svg>';
+  const ANT2_SVG = '<svg viewBox="0 0 20 14"><g fill="#2a1a0e"><circle cx="16" cy="7" r="2.2"/><ellipse cx="10" cy="7" rx="2.6" ry="1.8"/><ellipse cx="4" cy="7" rx="3.4" ry="2.6"/></g>' +
+    '<g stroke="#2a1a0e" stroke-width=".7"><path d="M9 7 L5 1 M9 7 L5 13 M10 7 L8 0 M10 7 L8 14 M11 7 L14 1 M11 7 L14 13"/></g></svg>';
+  const crickets = [], ants2 = [];
+  const sceneSize = () => ({ W: scene2.clientWidth, H: scene2.offsetHeight });
+  const wallSpot = (W, H) => ({ x: rnd(20, W - 20), y: rnd(60, H * 0.5) });
+  function buildCritters() {
+    crit2.innerHTML = '';
+    crickets.length = 0;
+    ants2.length = 0;
+    const { W, H } = sceneSize();
+    for (let i = 0; i < 3; i++) {
+      const el = document.createElement('div');
+      el.className = 'cricket';
+      el.innerHTML = CRICKET_SVG;
+      crit2.appendChild(el);
+      const p = wallSpot(W, H);
+      crickets.push({ el, x: p.x, y: p.y, tx: p.x, ty: p.y, state: 'crawl', timer: 0, away: 0, chirpT: rnd(0.3, 1.2) });
+    }
+    for (let i = 0; i < 14; i++) {
+      const el = document.createElement('div');
+      el.className = 's2-ant';
+      el.innerHTML = ANT2_SVG;
+      crit2.appendChild(el);
+      ants2.push({ el, x: rnd(0, W), y: rnd(0, H), tx: rnd(0, W), ty: rnd(0, H), angle: 0 });
+    }
+  }
+  function updateCritters(dt) {
+    const { W, H } = sceneSize();
+    crickets.forEach(c => {
+      if (c.state === 'away') {
+        c.away -= dt;
+        if (c.away <= 0) {
+          const p = wallSpot(W, H);
+          c.x = p.x; c.y = p.y; c.tx = p.x; c.ty = p.y;
+          c.state = 'crawl';
+          c.el.style.display = '';
+        }
+      } else if (c.state === 'fly') {
+        c.timer -= dt;
+        const dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy) || 1;
+        const step = Math.min(d, 240 * dt);
+        c.x += dx / d * step;
+        c.y += dy / d * step;
+        if (c.timer <= 0 || d < 6) {
+          c.state = 'away';
+          c.away = rnd(2.5, 4);
+          c.el.style.display = 'none';
+          c.el.classList.remove('flying');
+        }
+      } else {
+        const dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy);
+        if (d < 4) {
+          const p = wallSpot(W, H);
+          c.tx = p.x; c.ty = p.y;
+        } else {
+          const s = Math.min(d, 18 * dt);
+          c.x += dx / d * s;
+          c.y += dy / d * s;
+        }
+        c.chirpT -= dt;
+        if (c.chirpT <= 0) { chirp(); c.chirpT = rnd(0.5, 1.2); }
+      }
+      c.el.style.left = c.x + 'px';
+      c.el.style.top = c.y + 'px';
+    });
+    ants2.forEach(a => {
+      // Chase the nearest cricket that is sitting still
+      let target = null, best = 180;
+      crickets.forEach(c => {
+        if (c.state !== 'crawl') return;
+        const d = Math.hypot(c.x - a.x, c.y - a.y);
+        if (d < best) { best = d; target = c; }
+      });
+      let tx = a.tx, ty = a.ty, speed = 35;
+      if (target) {
+        tx = target.x; ty = target.y; speed = 75;
+        if (best < 20) {
+          // The cricket flies off, away from the ant
+          target.state = 'fly';
+          target.timer = 2.5;
+          target.el.classList.add('flying');
+          const ang = Math.atan2(target.y - a.y, target.x - a.x) + rnd(-0.4, 0.4);
+          target.tx = target.x + Math.cos(ang) * 700;
+          target.ty = target.y + Math.sin(ang) * 700;
+        }
+      } else if (Math.hypot(a.tx - a.x, a.ty - a.y) < 5) {
+        a.tx = rnd(0, W); a.ty = rnd(0, H * 0.9);
+      }
+      const dx = tx - a.x, dy = ty - a.y, d = Math.hypot(dx, dy);
+      if (d > 0.5) {
+        const s = Math.min(d, speed * dt);
+        a.x += dx / d * s;
+        a.y += dy / d * s;
+        a.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      }
+      a.el.style.left = a.x + 'px';
+      a.el.style.top = a.y + 'px';
+      a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
+    });
+  }
+
+  // ---- Grass in front: a curve rising 3 cm above the Start button and back down to its sides ----
+  function buildTufts2() {
+    tufts2.innerHTML = '';
+    const sr = scene2.getBoundingClientRect();
+    const W = scene2.clientWidth, H = scene2.offsetHeight;
+    const sb = startBtn2.getBoundingClientRect();
+    const cx = sb.left - sr.left + sb.width / 2, cy = sb.top - sr.top + sb.height / 2, halfW = sb.width / 2 + 20;
+    const boundary = x => {
+      const u = (x - cx) / halfW;
+      return Math.abs(u) <= 1 ? cy - 113 * (1 - u * u) : cy;
+    };
+    const blocks = [...scene2.querySelectorAll('.s2-content h1, .s2-content .msg, .s2-content .hud, .s2-counts, #s2-start, .lb, .s2-caves, #toHoles')].map(el => {
+      const r = el.getBoundingClientRect();
+      return { l: r.left - sr.left - 6, r: r.right - sr.left + 6, t: r.top - sr.top - 6, b: r.bottom - sr.top + 6 };
+    });
+    const count = Math.round(W * H * 0.5 / 280);
+    for (let i = 0; i < count; i++) {
+      const x = rnd(0, W), y = rnd(0, H);
+      if (y < boundary(x) + 6) continue;
+      const tall = Math.random() < 0.15 ? 2 : 1;
+      if (blocks.some(b => x + 17 * tall > b.l && x - 17 * tall < b.r && y > b.t && y - 26 * tall < b.b)) continue;
+      const t = document.createElement('div');
+      t.className = 'tuft';
+      const color = GREENS2[Math.floor(Math.random() * GREENS2.length)];
+      t.innerHTML = `<svg viewBox="0 0 40 30" width="100%" height="100%" style="color:${color}"><use href="#tuftSym"/></svg>`;
+      t.style.left = x + 'px';
+      t.style.top = y + 'px';
+      t.style.transform = `translate(-50%,-100%) rotate(${rnd(-25, 25).toFixed(1)}deg) scale(${(rnd(0.6, 1.2) * tall).toFixed(2)})`;
+      tufts2.appendChild(t);
+    }
+  }
+
+  window.bearRebuildTufts = () => buildTufts2();
+
+  // ---- Moving between the two scenes ----
+  let crittersBuilt = false;
+  function goCaves() {
+    if (window.whackStop) window.whackStop();
+    scene1.style.display = 'none';
+    ['ants', 'tufts', 'bugs'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    scene2.style.display = 'block';
+    window.scrollTo(0, 0);
+    if (!crittersBuilt) { buildCritters(); crittersBuilt = true; }
+    buildTufts2();
+  }
+  function goHoles() {
+    if (window.bearStop) window.bearStop();
+    scene2.style.display = 'none';
+    scene1.style.display = 'flex';
+    ['ants', 'tufts', 'bugs'].forEach(id => { document.getElementById(id).style.display = ''; });
+    window.scrollTo(0, 0);
+    if (window.rebuildTufts) window.rebuildTufts();
+  }
+  $('toCaves').addEventListener('click', goCaves);
+  $('toHoles').addEventListener('click', goHoles);
+  let rzT = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(rzT);
+    rzT = setTimeout(() => { if (scene2.style.display !== 'none') buildTufts2(); }, 200);
+  });
+
+  // ---- Main loop (only while this scene is showing) ----
+  buildCaves();
+  updateHud2();
+  let last2 = performance.now();
+  function frame2(ts) {
+    const dt = Math.min(0.05, (ts - last2) / 1000);
+    last2 = ts;
+    if (scene2.style.display !== 'none') {
+      if (running2) {
+        elapsed2 += dt;
+        timeLeft2 -= dt;
+        if (timeLeft2 <= 0) { timeLeft2 = 0; endGame2(null); }
+        if (quakeLeft > 0) {
+          quakeLeft -= dt;
+          if (quakeLeft <= 0) scene2.classList.remove('s2-quake');
+        } else if (elapsed2 > 8) {
+          quakeCd -= dt;
+          if (quakeCd <= 0) {
+            quakeLeft = 3;
+            quakeCd = rnd(9, 16);
+            scene2.classList.add('s2-quake');
+            rumble2();
+          }
+        }
+        if (quakeLeft <= 0) {
+          spawnCd -= dt;
+          if (spawnCd <= 0) {
+            trySpawn2();
+            const base = Math.max(0.45, 1.0 - elapsed2 / 100);
+            spawnCd = rnd(base * 0.7, base * 1.1);
+          }
+        }
+        const sec = Math.ceil(timeLeft2);
+        if (sec !== lastSec) { lastSec = sec; time2El.textContent = Math.max(0, sec); }
+      }
+      updateBears(dt);
+      if (crittersBuilt) updateCritters(dt);
+    }
+    requestAnimationFrame(frame2);
+  }
+  requestAnimationFrame(frame2);
 })();
 </script>
 
@@ -1603,6 +2181,138 @@
   });
 
   loadBoard();
+
+  // ---- Whack-a-Bear leaderboard: same rules, its own collection (scores2) ----
+  {
+  const formEl = document.getElementById('s2-lb-form');
+  const nameEl = document.getElementById('s2-lb-name');
+  const saveBtn = document.getElementById('s2-lb-save');
+  const listEl = document.getElementById('s2-lb-list');
+  const statusEl = document.getElementById('s2-lb-status');
+  let pendingScore = null;
+
+  // Remember the player's name on this device so they don't have to retype it
+  function savedName() {
+    try { return localStorage.getItem('whackName') || ''; } catch (e) { return ''; }
+  }
+  // A random token kept on this device, so only the device that saved a name can update it
+  function deviceToken() {
+    try {
+      let t = localStorage.getItem('whackDevice');
+      if (!t || !/^[A-Za-z0-9-]{16,64}$/.test(t)) {
+        const rnd = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+          : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        t = rnd;
+        localStorage.setItem('whackDevice', t);
+      }
+      return t;
+    } catch (e) {
+      return 'nostorage-' + Math.random().toString(16).slice(2, 18);
+    }
+  }
+  nameEl.value = savedName();
+
+  const configured = !firebaseConfig.projectId.startsWith('REPLACE');
+  let db = null;
+  if (configured) {
+    db = getFirestore();
+  }
+  if (!db) statusEl.textContent = 'Leaderboard is not set up yet.';
+
+  // Scores are grouped by day in Toronto time (Eastern), so the board resets at midnight
+  function todayKey() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    const get = t => parts.find(p => p.type === t).value;
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }
+
+  async function loadBoard() {
+    if (!db) return;
+    try {
+      const day = todayKey();
+      // Single-field filter only, so no composite index is needed; sorting happens here
+      const snap = await getDocs(query(collection(db, 'scores2'), where('day', '==', day), limit(200)));
+      const rows = snap.docs.map(d => d.data()).sort((a, b) => b.score - a.score).slice(0, 10);
+      listEl.innerHTML = '';
+      rows.forEach(v => {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.textContent = v.name;               // textContent avoids injecting HTML
+        const pts = document.createElement('b');
+        pts.textContent = v.score;
+        li.append(name, pts);
+        listEl.appendChild(li);
+      });
+      if (!rows.length) statusEl.textContent = 'No scores yet today. Be the first!';
+      if (window.bearRebuildTufts) window.bearRebuildTufts();   // the leaderboard list changed size
+    } catch (e) {
+      statusEl.textContent = 'Could not load the leaderboard.';
+    }
+  }
+
+  window.addEventListener('bear-gameover', e => {
+    const score = e.detail.score;
+    if (!db) return;
+    if (score <= 0) { statusEl.textContent = 'Scores of 0 are not saved.'; return; }
+    pendingScore = score;
+    formEl.style.display = 'flex';
+    nameEl.value = savedName();
+    nameEl.focus();
+    statusEl.textContent = `Enter your name to save ${score} points:`;
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const name = nameEl.value.trim();
+    if (!name) { statusEl.textContent = 'Please enter a name.'; return; }
+    if (!/^[A-Za-z0-9 _-]{1,12}$/.test(name)) {
+      statusEl.textContent = 'Use 1-12 letters, numbers, spaces, _ or -.';
+      return;
+    }
+    try { localStorage.setItem('whackName', name); } catch (e) {}
+    // One entry per name per day: the document ID is the day plus the lowercase name
+    const day = todayKey();
+    const ref = doc(db, 'scores2', `${day}__${name.toLowerCase()}`);
+    const owner = deviceToken();
+    saveBtn.disabled = true;
+    try {
+      const existing = await getDoc(ref);
+      if (existing.exists()) {
+        const prev = existing.data();
+        if (prev.owner !== owner) {
+          statusEl.textContent = `"${name}" is already taken today. Try another name.`;
+          return;
+        }
+        if (pendingScore <= prev.score) {
+          statusEl.textContent = `Your best today is ${prev.score}, so this score does not replace it.`;
+          return;
+        }
+        // Same device: replace its own entry with the higher score
+        await setDoc(ref, { name: prev.name, score: pendingScore, day, owner, createdAt: serverTimestamp() });
+        formEl.style.display = 'none';
+        statusEl.textContent = `Updated! New best today: ${pendingScore}`;
+        pendingScore = null;
+        await loadBoard();
+        return;
+      }
+      await setDoc(ref, { name, score: pendingScore, day, owner, createdAt: serverTimestamp() });
+      formEl.style.display = 'none';
+      statusEl.textContent = 'Saved!';
+      pendingScore = null;
+      await loadBoard();
+    } catch (err) {
+      console.error(err);
+      statusEl.textContent = err.code === 'permission-denied'
+        ? 'Saving was blocked by the database rules. Publish the latest firestore.rules.'
+        : 'Could not save your score. Try again later.';
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  loadBoard();
+  }
 </script>
 </body>
 </html>
