@@ -208,6 +208,46 @@
     }
   }
 
+  // Low rumble for the earthquake: filtered noise plus a deep wobbling tone
+  let quakeNodes = [];
+  function playQuakeSound() {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const dur = QUAKE_LENGTH / 1000;
+    const t0 = ctx.currentTime;
+
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 140;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, t0);
+    noiseGain.gain.exponentialRampToValueAtTime(0.9, t0 + 0.2);
+    noiseGain.gain.setValueAtTime(0.9, t0 + dur - 0.6);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    noise.connect(lowpass).connect(noiseGain).connect(ctx.destination);
+
+    const rumble = ctx.createOscillator();
+    const rumbleGain = ctx.createGain();
+    rumble.type = 'sawtooth';
+    rumble.frequency.setValueAtTime(48, t0);
+    rumble.frequency.linearRampToValueAtTime(34, t0 + dur);
+    rumbleGain.gain.setValueAtTime(0.0001, t0);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.2);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    rumble.connect(rumbleGain).connect(ctx.destination);
+
+    noise.start(t0);
+    noise.stop(t0 + dur);
+    rumble.start(t0);
+    rumble.stop(t0 + dur);
+    quakeNodes = [noise, rumble];
+  }
+
   // Earthquakes: random chance after a while, lasting 3 seconds
   function maybeQuake() {
     const elapsed = GAME_TIME - timeLeft;
@@ -224,6 +264,7 @@
       }
     });
     msgEl.textContent = 'EARTHQUAKE! Hold on!';
+    playQuakeSound();
     clearTimeout(quakeTimer);
     quakeTimer = setTimeout(endQuake, QUAKE_LENGTH);
   }
@@ -243,6 +284,8 @@
 
   function stopQuake() {
     clearTimeout(quakeTimer);
+    quakeNodes.forEach(n => { try { n.stop(); } catch (e) {} });
+    quakeNodes = [];
     quakeActive = false;
     document.body.classList.remove('quake');
     holes.forEach(h => h.mole.classList.remove('frozen'));
