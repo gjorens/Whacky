@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.16</div>
+  <div class="ver-tag">v1.17</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -875,14 +875,25 @@
   const boyEl = document.createElement('div');
   boyEl.className = 'boy';
   boyEl.innerHTML = BOY_SVG;
-  antsLayer.appendChild(boyEl);      // under the grass tufts, so he runs through them
+  bugsLayer.appendChild(boyEl);      // above the grass so he is always visible
   const boy = {
     el: boyEl, x: window.innerWidth / 2, y: window.innerHeight / 2,
     tx: 0, ty: 0, dir: 1, state: 'wander', timer: 0, clear: 0
   };
+  // True if a point is on or right next to one of the holes
+  function holeAt(x, y) {
+    for (const h of document.querySelectorAll('.hole')) {
+      const r = h.getBoundingClientRect();
+      if (x > r.left - 14 && x < r.right + 14 && y > r.top - 14 && y < r.bottom + 14) return true;
+    }
+    return false;
+  }
   function pickBoyTarget() {
-    boy.tx = rand(40, window.innerWidth - 40);
-    boy.ty = rand(80, window.innerHeight - 40);
+    for (let i = 0; i < 20; i++) {
+      boy.tx = rand(40, window.innerWidth - 40);
+      boy.ty = rand(80, window.innerHeight - 40);
+      if (!holeAt(boy.tx, boy.ty)) break;
+    }
   }
   pickBoyTarget();
   function nearestLadybug() {
@@ -906,6 +917,7 @@
       boy.clear = near.d < 150 ? 0 : boy.clear + dt;
       if (boy.clear > 3) {
         boy.el.classList.remove('crouch');
+        bugsLayer.appendChild(boy.el);
         boy.state = 'wander';
         pickBoyTarget();
       }
@@ -914,9 +926,16 @@
     }
     if (boy.state === 'run') {
       // Run straight away from the nearest ladybug
-      const ax = boy.x - near.x, ay = boy.y - near.y, L = Math.hypot(ax, ay) || 1;
-      boy.x = Math.min(W - 20, Math.max(20, boy.x + ax / L * 170 * dt));
-      boy.y = Math.min(H - 20, Math.max(40, boy.y + ay / L * 170 * dt));
+      let ax = boy.x - near.x, ay = boy.y - near.y;
+      const L = Math.hypot(ax, ay) || 1;
+      ax /= L; ay /= L;
+      // Keep off the holes: if the way out is blocked, swing sideways
+      if (holeAt(boy.x + ax * 20, boy.y + ay * 20)) {
+        const t = ax; ax = -ay; ay = t;
+        if (holeAt(boy.x + ax * 20, boy.y + ay * 20)) { ax = -ax; ay = -ay; }
+      }
+      boy.x = Math.min(W - 20, Math.max(20, boy.x + ax * 170 * dt));
+      boy.y = Math.min(H - 40, Math.max(40, boy.y + ay * 170 * dt));
       boy.dir = ax >= 0 ? 1 : -1;
       boy.timer -= dt;
       if (boy.timer <= 0) {
@@ -945,8 +964,8 @@
       return;
     }
     const dx = boy.tx - boy.x, dy = boy.ty - boy.y, d = Math.hypot(dx, dy);
-    if (d < 6) {
-      pickBoyTarget();
+    if (d < 6 || holeAt(boy.x + dx / d * 20, boy.y + dy / d * 20)) {
+      pickBoyTarget();                 // reached it, or a hole is in the way
     } else {
       const step = Math.min(d, 30 * dt);
       boy.x += dx / d * step;
