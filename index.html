@@ -946,6 +946,21 @@
   function savedName() {
     try { return localStorage.getItem('whackName') || ''; } catch (e) { return ''; }
   }
+  // A random token kept on this device, so only the device that saved a name can update it
+  function deviceToken() {
+    try {
+      let t = localStorage.getItem('whackDevice');
+      if (!t || !/^[A-Za-z0-9-]{16,64}$/.test(t)) {
+        const rnd = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+          : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        t = rnd;
+        localStorage.setItem('whackDevice', t);
+      }
+      return t;
+    } catch (e) {
+      return 'nostorage-' + Math.random().toString(16).slice(2, 18);
+    }
+  }
   nameEl.value = savedName();
 
   const configured = !firebaseConfig.projectId.startsWith('REPLACE');
@@ -1010,14 +1025,29 @@
     // One entry per name per day: the document ID is the day plus the lowercase name
     const day = todayKey();
     const ref = doc(db, 'scores', `${day}__${name.toLowerCase()}`);
+    const owner = deviceToken();
     saveBtn.disabled = true;
     try {
       const existing = await getDoc(ref);
       if (existing.exists()) {
-        statusEl.textContent = `"${name}" is already taken today. Try another name.`;
+        const prev = existing.data();
+        if (prev.owner !== owner) {
+          statusEl.textContent = `"${name}" is already taken today. Try another name.`;
+          return;
+        }
+        if (pendingScore <= prev.score) {
+          statusEl.textContent = `Your best today is ${prev.score}, so this score does not replace it.`;
+          return;
+        }
+        // Same device: replace its own entry with the higher score
+        await setDoc(ref, { name: prev.name, score: pendingScore, day, owner, createdAt: serverTimestamp() });
+        formEl.style.display = 'none';
+        statusEl.textContent = `Updated! New best today: ${pendingScore}`;
+        pendingScore = null;
+        await loadBoard();
         return;
       }
-      await setDoc(ref, { name, score: pendingScore, day, createdAt: serverTimestamp() });
+      await setDoc(ref, { name, score: pendingScore, day, owner, createdAt: serverTimestamp() });
       formEl.style.display = 'none';
       statusEl.textContent = 'Saved!';
       pendingScore = null;

@@ -8,10 +8,10 @@ service cloud.firestore {
       allow read: if true;
 
       // Anyone can add a score, but only with the expected shape and sane values.
-      // Document ID must be "<day>__<lowercase name>", which makes each name unique per day:
-      // a second write to the same ID is an update, and updates are blocked below.
+      // Document ID must be "<day>__<lowercase name>", which makes each name unique per day.
+      // Each entry records an "owner" token kept on the device that created it.
       // Scores are checked for shape, not proven: the game runs in the browser.
-      allow create: if request.resource.data.keys().hasOnly(['name', 'score', 'day', 'createdAt'])
+      allow create: if request.resource.data.keys().hasOnly(['name', 'score', 'day', 'createdAt', 'owner'])
         && request.resource.data.name is string
         && request.resource.data.name.matches('^[A-Za-z0-9 _-]{1,12}$')
         && request.resource.data.score is int
@@ -19,11 +19,23 @@ service cloud.firestore {
         && request.resource.data.score <= 1000
         && request.resource.data.day is string
         && request.resource.data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.owner is string
+        && request.resource.data.owner.matches('^[A-Za-z0-9-]{16,64}$')
         && docId == request.resource.data.day + '__' + request.resource.data.name.lower()
         && request.resource.data.createdAt == request.time;
 
-      // Nobody can edit or delete scores from the browser.
-      allow update, delete: if false;
+      // The same device can replace its own entry, but only with a higher score.
+      // Name, day and owner cannot change, and nobody can delete entries.
+      allow update: if resource.data.owner == request.resource.data.owner
+        && request.resource.data.keys().hasOnly(['name', 'score', 'day', 'createdAt', 'owner'])
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.day == resource.data.day
+        && request.resource.data.score is int
+        && request.resource.data.score > resource.data.score
+        && request.resource.data.score <= 1000
+        && request.resource.data.createdAt == request.time;
+
+      allow delete: if false;
     }
   }
 }
