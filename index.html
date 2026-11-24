@@ -177,7 +177,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.2</div>
+  <div class="ver-tag">v1.3</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -381,6 +381,10 @@
           // Shaken off: keep running away from the ladybug
           if (Math.hypot(a.tx - a.x, a.ty - a.y) < 4) fleeTarget(a);
           moveAnt(a, a.tx, a.ty, 130, dt);
+          // Draw the new position now; the early return would otherwise skip the screen update
+          a.el.style.left = a.x + 'px';
+          a.el.style.top = a.y + 'px';
+          a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
           return;
         }
         a.scaredUntil = 0;
