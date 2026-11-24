@@ -98,7 +98,8 @@
   button:active { transform:translateY(2px); box-shadow:0 2px 0 #b8923e; }
   /* Keep text and controls above the grass */
   h1, .hud, .bonus, .thermo-wrap, button, .msg, .lb { position:relative; z-index:3; }
-  .stage { display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; }
+  .stage { display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; touch-action:none; }
+  .hole { touch-action:none; }
   .thermo-wrap { display:flex; flex-direction:column; align-items:stretch; gap:6px; width:min(88vw, 320px); }
   .thermo-head { display:flex; justify-content:space-between; align-items:baseline; }
   .acc-label { font-size:1.3rem; font-weight:800; color:var(--accent); }
@@ -696,6 +697,9 @@
   }
 
   startBtn.addEventListener('click', startGame);
+
+  // Stop the page from scrolling when a finger drags across the play area
+  document.querySelector('.stage').addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 })();
 </script>
 
