@@ -190,7 +190,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.10</div>
+  <div class="ver-tag">v1.11</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -401,7 +401,9 @@
       heading: rand(0, Math.PI * 2), turn: 0, phase: rand(0, 10),
       burrowIn: rand(8, 16),           // seconds until it next burrows
       mode: 'out',                     // out | entering | under | emerging
-      len: 1,                          // share of the body showing (1 = full length)
+      d: 0, e: 0,                      // distance travelled while entering / emerging (0 to 70 px)
+      cx0: 0, cy0: 0, ex: 0, ey: 0,    // start centre and hole position for the current burrow
+      clipL: 0, clipR: 0, angle: 0,    // parts of the body hidden by the ground
       underLeft: 0                     // seconds left underground
     });
   }
@@ -417,45 +419,58 @@
     setTimeout(() => h.remove(), 22000);
   }
   function placeWorm(w) {
-    w.el.firstElementChild.style.transform = `scaleX(${w.len})`;
     w.el.style.left = w.x + 'px';
     w.el.style.top = w.y + 'px';
-    w.el.style.transform = `translate(-50%,-50%) rotate(${(w.heading + Math.sin(w.phase * 3) * 0.15) * 180 / Math.PI}deg)`;
+    w.el.style.transform = `translate(-50%,-50%) rotate(${w.angle}deg)`;
+    w.el.style.clipPath = `inset(0 ${w.clipR}px 0 ${w.clipL}px)`;
   }
   // Wanders gently with a slithering sway; turns back toward the middle near the edges
   function moveWorm(w, dt) {
     const W = window.innerWidth, H = window.innerHeight;
     w.phase += dt;
+    const dx = Math.cos(w.heading), dy = Math.sin(w.heading);
     if (w.mode === 'entering') {
-      // Head first: the body shortens into the hole over about 0.8 seconds
-      w.len = Math.max(0, w.len - dt / 0.8);
-      if (w.len <= 0) {
+      // Head first: the head slips into the hole and the body follows, over 5 seconds
+      w.d = Math.min(70, w.d + 14 * dt);
+      w.x = w.cx0 + dx * w.d;
+      w.y = w.cy0 + dy * w.d;
+      w.clipL = 0;
+      w.clipR = w.d;                     // the ground hides the part that has gone in
+      w.angle = w.heading * 180 / Math.PI;
+      if (w.d >= 70) {
         w.mode = 'under';
         w.underLeft = 5;                 // five seconds underground
-        w.el.style.opacity = '0';
       }
       placeWorm(w);
       return;
     }
     if (w.mode === 'under') {
       w.underLeft -= dt;
+      w.clipL = 0;
+      w.clipR = 70;                      // fully hidden
       if (w.underLeft <= 0) {
-        // Come up a short way off, in a random direction
+        // Come up a short way off in a random direction, head first
         const ang = rand(0, Math.PI * 2), r = rand(60, 120);
-        w.x = Math.min(W - 30, Math.max(30, w.x + Math.cos(ang) * r));
-        w.y = Math.min(H - 30, Math.max(30, w.y + Math.sin(ang) * r));
-        makeWormHole(w.x, w.y);          // the way out
+        w.ex = Math.min(W - 30, Math.max(30, w.x + Math.cos(ang) * r));
+        w.ey = Math.min(H - 30, Math.max(30, w.y + Math.sin(ang) * r));
+        w.heading = rand(0, Math.PI * 2);
+        w.e = 0;
+        makeWormHole(w.ex, w.ey);        // the way out
         w.mode = 'emerging';
-        w.len = 0;
-        w.el.style.opacity = '1';
       }
       placeWorm(w);
       return;
     }
     if (w.mode === 'emerging') {
-      // Head first: the body grows out over about a second
-      w.len = Math.min(1, w.len + dt / 1.0);
-      if (w.len >= 1) {
+      // Head first: the head leads out of the hole, and the body grows out behind it over 5 seconds
+      w.e = Math.min(70, w.e + 14 * dt);
+      const ndx = Math.cos(w.heading), ndy = Math.sin(w.heading);
+      w.x = w.ex + ndx * (w.e - 35);
+      w.y = w.ey + ndy * (w.e - 35);
+      w.clipL = 70 - w.e;                // the ground still hides the body behind the hole
+      w.clipR = 0;
+      w.angle = w.heading * 180 / Math.PI;
+      if (w.e >= 70) {
         w.mode = 'out';
         w.burrowIn = rand(8, 16);
       }
@@ -466,7 +481,8 @@
     w.burrowIn -= dt;
     if (w.burrowIn <= 0) {
       w.mode = 'entering';
-      makeWormHole(w.x, w.y);            // the way in
+      w.cx0 = w.x; w.cy0 = w.y; w.d = 0;
+      makeWormHole(w.x + dx * 35, w.y + dy * 35);   // the head is at the hole's edge
       placeWorm(w);
       return;
     }
@@ -478,9 +494,12 @@
       w.heading += diff * Math.min(1, dt * 1.5);
     }
     const sway = Math.sin(w.phase * 3) * 0.15;
-    const speed = 10;                                   // pixels per second: a slow crawl
+    const speed = 10;                    // pixels per second: a slow crawl
     w.x += Math.cos(w.heading + sway) * speed * dt;
     w.y += Math.sin(w.heading + sway) * speed * dt;
+    w.angle = (w.heading + sway) * 180 / Math.PI;
+    w.clipL = 0;
+    w.clipR = 0;
     placeWorm(w);
   }
 
