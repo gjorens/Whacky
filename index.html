@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.18</div>
+  <div class="ver-tag">v1.19</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -881,12 +881,15 @@
     tx: 0, ty: 0, dir: 1, state: 'wander', timer: 0, clear: 0
   };
   // True if a point is on or right next to one of the holes
-  function holeAt(x, y) {
+  function holeRectAt(x, y) {
     for (const h of document.querySelectorAll('.hole')) {
       const r = h.getBoundingClientRect();
-      if (x > r.left - 14 && x < r.right + 14 && y > r.top - 14 && y < r.bottom + 14) return true;
+      if (x > r.left - 14 && x < r.right + 14 && y > r.top - 14 && y < r.bottom + 14) return r;
     }
-    return false;
+    return null;
+  }
+  function holeAt(x, y) {
+    return holeRectAt(x, y) !== null;
   }
   function pickBoyTarget() {
     for (let i = 0; i < 20; i++) {
@@ -912,6 +915,15 @@
   function moveBoy(dt) {
     const W = window.innerWidth, H = window.innerHeight;
     const near = nearestLadybug();
+    if (boy.state !== 'hide') {
+      const r = holeRectAt(boy.x, boy.y);
+      if (r) {
+        const ex = boy.x - (r.left + r.right) / 2, ey = boy.y - (r.top + r.bottom) / 2;
+        const L = Math.hypot(ex, ey) || 1;
+        boy.x += ex / L * 120 * dt;
+        boy.y += ey / L * 120 * dt;
+      }
+    }
     if (boy.state === 'hide') {
       // Crouched in the grass, under the tufts. Comes back up after 3 seconds with no ladybugs nearby
       boy.clear = near.d < 150 ? 0 : boy.clear + dt;
