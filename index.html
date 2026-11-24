@@ -362,7 +362,7 @@
       el,
       x: rand(0, window.innerWidth), y: rand(0, window.innerHeight),
       tx: rand(0, window.innerWidth), ty: rand(0, window.innerHeight),
-      speed: rand(25, 60), angle: 0
+      speed: rand(25, 60), angle: 0, cluster: null
     });
   }
 
@@ -372,11 +372,25 @@
     lastTs = ts;
     const W = window.innerWidth, H = window.innerHeight;
     ants.forEach(a => {
-      const dx = a.tx - a.x, dy = a.ty - a.y, dist = Math.hypot(dx, dy);
-      if (dist < 4) {
+      const c = a.cluster;
+      if (c && ts >= c.until) {
+        // Cluster is over: scatter outward from the ladybug and go back to roaming
+        const ang = rand(0, Math.PI * 2), r = rand(40, 90);
+        a.tx = c.bug.x + Math.cos(ang) * r; a.ty = c.bug.y + Math.sin(ang) * r;
+        a.cluster = null;
+        antsLayer.appendChild(a.el);
+      }
+      let tx = a.tx, ty = a.ty, speed = a.speed;
+      if (a.cluster) {
+        // Clustered ants hug the ladybug and keep up with it
+        tx = a.cluster.bug.x + a.cluster.ox; ty = a.cluster.bug.y + a.cluster.oy;
+        speed = 160;
+      }
+      const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
+      if (!a.cluster && dist < 4) {
         a.tx = rand(0, W); a.ty = rand(0, H);
-      } else {
-        const step = Math.min(dist, a.speed * dt);
+      } else if (dist > 0.5) {
+        const step = Math.min(dist, speed * dt);
         a.x += dx / dist * step;
         a.y += dy / dist * step;
         a.angle = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -492,6 +506,31 @@
     b.angle = Math.atan2(dy, dx) * 180 / Math.PI;
   }
   requestAnimationFrame(bugLoop);
+
+  // Every so often, ten ants swarm one ladybug for five seconds, then disperse
+  function startAntCluster() {
+    const candidates = bugs.filter(b => b.state !== 'fly');
+    const free = ants.filter(a => !a.cluster);
+    if (!candidates.length || free.length < 10) return;
+    const bug = candidates[Math.floor(Math.random() * candidates.length)];
+    // Pick 10 random free ants
+    for (let i = 0; i < 10; i++) {
+      const j = i + Math.floor(Math.random() * (free.length - i));
+      [free[i], free[j]] = [free[j], free[i]];
+    }
+    const until = performance.now() + 5000;
+    for (let i = 0; i < 10; i++) {
+      const a = free[i];
+      const ang = (i / 10) * Math.PI * 2 + rand(-0.2, 0.2);
+      const r = rand(8, 20);
+      a.cluster = { bug, ox: Math.cos(ang) * r, oy: Math.sin(ang) * r, until };
+      bugsLayer.appendChild(a.el);   // draw the ants on top of the ladybug
+    }
+  }
+  function scheduleAntCluster() {
+    setTimeout(() => { startAntCluster(); scheduleAntCluster(); }, rand(15000, 25000));
+  }
+  scheduleAntCluster();
 
   function setScore(n) { score = n; scoreEl.textContent = score; }
 
