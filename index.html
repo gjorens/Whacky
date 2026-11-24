@@ -230,6 +230,15 @@
   #toCaves { top:-2px; right:2px; transform:rotate(-5deg); font-size:.7rem; padding:4px 8px; }
   #toCaves .post { height:34px; }
   #toHoles { left:8px; bottom:90px; transform:rotate(4deg); }
+  #toCanyon { right:8px; bottom:90px; transform:rotate(-4deg); }
+  /* Scene 3: the canyon run */
+  #scene3 { position:fixed; inset:0; z-index:5; background:#1d2c33; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #canyon-cv { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .s3-hud { position:absolute; top:12px; left:12px; font-size:1.1rem; color:var(--text); text-shadow:0 2px 0 #000; z-index:3; }
+  .s3-hud b { color:var(--accent); font-size:1.4rem; }
+  .s3-msg { position:absolute; top:50px; left:0; right:0; text-align:center; color:var(--text); text-shadow:0 2px 0 #000; padding:0 16px; z-index:3; }
+  #s3-start { position:absolute; left:50%; bottom:40px; transform:translateX(-50%); z-index:3; }
+  #toCavesFromCanyon { bottom:100px; right:8px; transform:rotate(-4deg); }
 </style>
 </head>
 <body>
@@ -267,7 +276,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.30</div>
+  <div class="ver-tag">v1.31</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -352,6 +361,7 @@
   <div class="s2-tufts" id="s2-tufts"></div>
   <div class="s2-fall" id="s2-fall"></div>
   <div class="sign" id="toHoles"><i class="post"></i><i class="crack"></i><i class="knot"></i><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px;margin-right:4px"><path d="M12 2 L2 12 M9 12 H2 V5" fill="none" stroke="#2e1a0b" stroke-width="2.4" stroke-linecap="round"/></svg>To Holes</span></div>
+  <div class="sign" id="toCanyon"><i class="post"></i><i class="crack"></i><i class="knot"></i><span>To the Canyon<svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px;margin-left:4px"><path d="M2 2 L12 12 M12 7 V12 H7" fill="none" stroke="#2e1a0b" stroke-width="2.4" stroke-linecap="round"/></svg></span></div>
   <div class="s2-content">
     <h1>🐻 Whack-a-Bear</h1>
     <div class="s2-caves" id="s2-caves"></div>
@@ -376,6 +386,14 @@
   <div class="banner" id="s2-banner"><span>GAME OVER</span></div>
 </div>
 <div class="vignette"></div>
+<div id="scene3" style="display:none">
+  <canvas id="canyon-cv"></canvas>
+  <div class="s3-hud">Time <b id="s3-time">0.0</b> &nbsp; Penalty <b id="s3-pen">0</b>s</div>
+  <div class="s3-msg" id="s3-msg">Walk the log to the far side. Hold to walk, tap a side to step.</div>
+  <button id="s3-start">Start Run</button>
+  <div class="sign" id="toCavesFromCanyon"><i class="post"></i><i class="crack"></i><i class="knot"></i><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px;margin-right:4px"><path d="M12 12 L2 2 M2 7 V2 H7" fill="none" stroke="#2e1a0b" stroke-width="2.4" stroke-linecap="round"/></svg>To Caves</span></div>
+</div>
+
 
 <script>
 (function () {
@@ -2118,6 +2136,237 @@
     requestAnimationFrame(frame2);
   }
   requestAnimationFrame(frame2);
+})();
+</script>
+
+<script>
+// ---- Scene 3: The Canyon. A timed run along a fallen log, drawn in simple 3D on a canvas ----
+(function () {
+  const sc = document.getElementById('scene3');
+  const scene1El = document.getElementById('scene1'), scene2El = document.getElementById('scene2');
+  const cv = document.getElementById('canyon-cv'), ctx = cv.getContext('2d');
+  const timeEl = document.getElementById('s3-time'), penEl = document.getElementById('s3-pen');
+  const msgEl = document.getElementById('s3-msg'), startEl = document.getElementById('s3-start');
+  const LOG_LEN = 60, CAM_H = 1.6, SPEED = 2.2, SQ_SPEED = 3.5, PENALTY = 3, SHAKES = 3;
+  const LANE_X = [-0.9, 0, 0.9];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  let W = 0, H = 0, dpr = 1;
+  let running = false, t = 0, pen = 0, pos = 0, lane = 1, px = 0, holding = false, walkT = 0;
+  let squirrels = [], spawnCd = 2, attached = null, flash = '', finished = false;
+  let lastTs = performance.now();
+
+  function resize() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', () => { if (sc.style.display !== 'none') resize(); });
+
+  const focal = () => W * 0.9;
+  const horizon = () => H * 0.42;
+  // Perspective projection: x is sideways (camera follows the walker), y is height, z is distance ahead
+  function proj(x, y, z) {
+    const s = focal() / z;
+    return { sx: W / 2 + (x - px) * s, sy: horizon() + (CAM_H - y) * s, s };
+  }
+
+  function drawSquirrel(x, y, k, rabid) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = '#8a5a2b';
+    ctx.beginPath(); ctx.ellipse(0, -0.45 * k, 0.42 * k, 0.3 * k, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.beginPath(); ctx.ellipse(-0.4 * k, -0.95 * k, 0.5 * k, 0.22 * k, -0.6, 0, Math.PI * 2); ctx.fill(); // tail
+    ctx.beginPath(); ctx.arc(0.36 * k, -0.8 * k, 0.2 * k, 0, Math.PI * 2); ctx.fill();                   // head
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath(); ctx.arc(0.42 * k, -0.84 * k, 0.06 * k, 0, Math.PI * 2); ctx.fill();                  // red eye
+    if (rabid) {
+      ctx.fillStyle = '#ffffff';
+      [[0.5, -0.66], [0.56, -0.7], [0.46, -0.72]].forEach(p => { ctx.beginPath(); ctx.arc(p[0] * k, p[1] * k, 0.05 * k, 0, Math.PI * 2); ctx.fill(); });
+    }
+    ctx.restore();
+  }
+
+  function wall(side) {
+    const pts = [[side * 1.5, 0, 0.4], [side * 9, 34, 0.4], [side * 9, 34, 90], [side * 1.5, 0, 90]];
+    const p = pts.map(q => proj(q[0], q[1], q[2]));
+    ctx.fillStyle = '#4a4037';
+    ctx.beginPath();
+    p.forEach((q, i) => (i ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy)));
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#2b241e'; ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  function drawLog() {
+    const remain = LOG_LEN - pos;
+    const zFar = Math.min(90, remain);
+    let z = 0.4;
+    for (let guard = 0; z < zFar && guard < 400; guard++) {
+      const z2 = Math.min(zFar, z * 1.06 + 0.05);
+      const band = Math.floor((pos + z) * 1.2) % 2;     // bark bands move past as you walk
+      const a = proj(-1.5, 0, z), b = proj(1.5, 0, z), c = proj(1.5, 0, z2), d = proj(-1.5, 0, z2);
+      ctx.fillStyle = band ? '#7a5632' : '#65462a';
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.lineTo(c.sx, c.sy); ctx.lineTo(d.sx, d.sy);
+      ctx.closePath(); ctx.fill();
+      z = z2;
+    }
+    if (remain > 0.4 && remain < 90) {                  // the far ledge, where the run ends
+      const a = proj(-6, 0, remain), b = proj(6, 0, remain), c = proj(6, 0, remain + 12), d = proj(-6, 0, remain + 12);
+      ctx.fillStyle = '#4f9a3c';
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.lineTo(c.sx, c.sy); ctx.lineTo(d.sx, d.sy);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  function drawSquirrels() {
+    squirrels.filter(s => !s.done).sort((a, b) => b.z - a.z).forEach(s => {
+      const z = s.z - pos;
+      if (z < 0.3 || z > 95) return;
+      const p = proj(LANE_X[s.lane], 0, z);
+      drawSquirrel(p.sx, p.sy, p.s * 0.5, true);
+    });
+  }
+
+  function drawPlayer() {
+    const u = Math.min(W, H) * 0.09;
+    const cx = W / 2, base = H * 0.9;
+    const step = holding && !attached && running ? Math.sin(walkT * 9) : 0;
+    ctx.save(); ctx.translate(cx, base);
+    ctx.strokeStyle = '#2a3a6a'; ctx.lineWidth = u * 0.28; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.2, -u * 0.8); ctx.lineTo(-u * 0.2 - step * u * 0.25, 0);
+    ctx.moveTo(u * 0.2, -u * 0.8);  ctx.lineTo(u * 0.2 + step * u * 0.25, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(-u * 0.4, -u * 2.0, u * 0.8, u * 1.2);
+    ctx.fillStyle = '#d8322b';
+    for (let k = 0; k < 4; k++) ctx.fillRect(-u * 0.4, -u * (1.95 - k * 0.3), u * 0.8, u * 0.15);
+    ctx.fillStyle = '#f2c79b'; ctx.beginPath(); ctx.arc(0, -u * 2.3, u * 0.35, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d8322b'; ctx.beginPath(); ctx.arc(0, -u * 2.3, u * 0.37, Math.PI, 0); ctx.fill();
+    ctx.restore();
+    if (attached) drawSquirrel(cx + u * 0.6, base - u * 1.6, u * 0.9, true);   // clinging on
+  }
+
+  function draw() {
+    const hz = horizon();
+    let g = ctx.createLinearGradient(0, 0, 0, hz);
+    g.addColorStop(0, '#5fa8d8'); g.addColorStop(1, '#cfe8f2');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, hz + 1);
+    ctx.fillStyle = '#6d6057';
+    ctx.beginPath(); ctx.moveTo(0, hz); ctx.lineTo(0, hz - H * 0.07); ctx.lineTo(W * 0.3, hz - H * 0.12);
+    ctx.lineTo(W * 0.55, hz - H * 0.05); ctx.lineTo(W * 0.8, hz - H * 0.11); ctx.lineTo(W, hz - H * 0.06); ctx.lineTo(W, hz);
+    ctx.closePath(); ctx.fill();
+    g = ctx.createLinearGradient(0, hz, 0, H);
+    g.addColorStop(0, '#1d2c33'); g.addColorStop(1, '#0c1418');
+    ctx.fillStyle = g; ctx.fillRect(0, hz, W, H - hz);
+    wall(-1); wall(1);
+    drawLog();
+    drawSquirrels();
+    drawPlayer();
+  }
+
+  function bite(s) {
+    s.done = true;
+    attached = { shakes: SHAKES };
+    pen += PENALTY;
+    flash = 'A squirrel bit you! +3 seconds';
+  }
+
+  function finish() {
+    running = false; finished = true; holding = false;
+    const total = t + pen;
+    msgEl.textContent = `You made it! ${total.toFixed(1)} s (${t.toFixed(1)} s running + ${pen} s penalty)`;
+    startEl.textContent = 'Run Again';
+    startEl.style.display = '';
+  }
+
+  function update(dt) {
+    if (!running) return;
+    t += dt;
+    px += (LANE_X[lane] - px) * Math.min(1, dt * 10);
+    if (!attached && holding) { pos += SPEED * dt; walkT += dt; }
+    if (pos >= LOG_LEN) { finish(); return; }
+    spawnCd -= dt;
+    if (spawnCd <= 0 && squirrels.length < 2) {
+      squirrels.push({ z: pos + rnd(24, 32), lane: Math.floor(Math.random() * 3), done: false });
+      spawnCd = rnd(3, 5);
+    }
+    squirrels.forEach(s => {
+      if (s.done) return;
+      s.z -= SQ_SPEED * dt;
+      const d = s.z - pos;
+      if (d < 1.2 && d > -1.5) {
+        if (s.lane === lane && !attached) bite(s);       // same lane: it bites
+      } else if (d <= -1.5) {
+        s.done = true;                                     // it ran past you
+      }
+    });
+    squirrels = squirrels.filter(s => !s.done);
+  }
+
+  function updateHud() {
+    timeEl.textContent = t.toFixed(1);
+    penEl.textContent = pen;
+    if (finished) return;
+    if (attached) msgEl.textContent = `Tap to shake it off! ${attached.shakes} to go`;
+    else if (flash) msgEl.textContent = flash;
+    else if (running) msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
+  }
+
+  sc.addEventListener('pointerdown', e => {
+    if (e.target.closest('.sign, button')) return;
+    if (!running) return;
+    if (attached) {
+      attached.shakes -= 1;
+      if (attached.shakes <= 0) { attached = null; flash = 'Shaken off!'; }
+      else flash = '';
+      return;
+    }
+    holding = true;
+    if (e.clientX < W * 0.35 && lane > 0) lane--;
+    else if (e.clientX > W * 0.65 && lane < 2) lane++;
+    flash = '';
+  });
+  sc.addEventListener('pointerup', () => { holding = false; });
+  sc.addEventListener('pointercancel', () => { holding = false; });
+
+  startEl.addEventListener('click', () => {
+    t = 0; pen = 0; pos = 0; lane = 1; px = 0; walkT = 0;
+    squirrels = []; spawnCd = 2; attached = null; flash = ''; finished = false; holding = false;
+    running = true;
+    startEl.style.display = 'none';
+    msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
+  });
+
+  function goCanyon() {
+    if (window.bearStop) window.bearStop();
+    if (window.whackStop) window.whackStop();
+    scene1El.style.display = 'none';
+    scene2El.style.display = 'none';
+    ['ants', 'tufts', 'bugs'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    sc.style.display = 'block';
+    resize();
+  }
+  function goCavesFromCanyon() {
+    running = false; holding = false; attached = null;
+    sc.style.display = 'none';
+    scene2El.style.display = 'block';
+    window.scrollTo(0, 0);
+    if (window.bearRebuildTufts) window.bearRebuildTufts();
+  }
+  document.getElementById('toCanyon').addEventListener('click', goCanyon);
+  document.getElementById('toCavesFromCanyon').addEventListener('click', goCavesFromCanyon);
+
+  resize();
+  function frame(ts) {
+    const dt = Math.min(0.05, (ts - lastTs) / 1000);
+    lastTs = ts;
+    if (sc.style.display !== 'none') {
+      update(dt);
+      draw();
+      updateHud();
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 })();
 </script>
 
