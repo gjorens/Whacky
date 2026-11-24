@@ -63,8 +63,8 @@
   .bug .wing { display:none; transform-box:view-box; transform-origin:23px 20px; }
   /* The shell splits along the body into a top and a bottom half. They lift away from the body when flying or fluttering, and close slowly after landing */
   .bug .shell-t, .bug .shell-b { transform-box:view-box; transform-origin:23px 20px; transition: transform 1s ease-in-out 1s; }
-  .bug.flying .shell-t, .bug.flutter .shell-t { transform: translateY(-6px) scaleY(1.1); transition: transform .35s ease-out; }
-  .bug.flying .shell-b, .bug.flutter .shell-b { transform: translateY(6px) scaleY(1.1); transition: transform .35s ease-out; }
+  .bug.flying .shell-t, .bug.flutter .shell-t { transform: translateY(-3px) scaleY(1.05); transition: transform .35s ease-out; }
+  .bug.flying .shell-b, .bug.flutter .shell-b { transform: translateY(3px) scaleY(1.05); transition: transform .35s ease-out; }
   /* After landing: the wings fold up first, then the shell closes */
   .bug.folding .wing { display:inline; animation: foldWing 1s ease-in forwards; }
   @keyframes foldWing { from { transform:scaleY(1); } to { transform:scaleY(.05); } }
@@ -267,7 +267,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.27</div>
+  <div class="ver-tag">v1.28</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -740,7 +740,7 @@
   // ---- Ladybugs: each one walks, then flies somewhere, then rests ----
   const bugsLayer = document.getElementById('bugs');
   const BUG_SVG = `<svg viewBox="0 0 40 40">
-      <ellipse class="wing" cx="22" cy="20" rx="15" ry="7" fill="#141012" opacity=".92"/>
+      <ellipse class="wing" cx="22" cy="20" rx="15" ry="7" fill="#141012" opacity=".75"/>
       <ellipse cx="23" cy="20" rx="12" ry="11" fill="#1b1410"/>
       <g class="shell-t"><path d="M7 20 A16 14 0 0 1 39 20 Z" fill="#d8322b"/><circle cx="16" cy="13" r="2.8" fill="#1b1410"/><circle cx="29" cy="12" r="2.8" fill="#1b1410"/></g>
       <g class="shell-b"><path d="M7 20 A16 14 0 0 0 39 20 Z" fill="#d8322b"/><circle cx="15" cy="25" r="2.8" fill="#1b1410"/><circle cx="30" cy="27" r="2.8" fill="#1b1410"/></g>
