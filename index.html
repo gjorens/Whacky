@@ -276,7 +276,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.33</div>
+  <div class="ver-tag">v1.34</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -2140,7 +2140,7 @@
 </script>
 
 <script>
-// ---- Scene 3: River Crossing. Walk a log across a river that flows across the view ----
+// ---- Scene 3: River Crossing. Walk a log across a river that flows across the view, dodging creatures ----
 (function () {
   const sc = document.getElementById('scene3');
   const scene1El = document.getElementById('scene1'), scene2El = document.getElementById('scene2');
@@ -2152,10 +2152,14 @@
   const CAM_H = 1.6, SPEED = 2.2, FLOW = 1.6, NEAR = 0.05;
   const LOG_HALF = 0.9, LANE_X = [-0.6, 0, 0.6];
   const WATER_Y = -0.6, LOG_Y = 0.6, BANK_Y = 0.5;
-  const WIDE = 40;                              // scenery runs well past both sides of the view
+  const WIDE = 40, SPRITE = 0.6, BITE_PENALTY = 3, FALL_AT = 3;
+  const NAME = { croc: 'crocodile', snake: 'water snake', shark: 'shark', hippo: 'hippo', spider: 'spider', eagle: 'eagle', goodEagle: 'eagle' };
+  const rnd = (a, b) => a + Math.random() * (b - a);
   let W = 0, H = 0, dpr = 1;
-  let running = false, t = 0, pos = 0, lane = 1, px = 0, holding = false, walkT = 0, flowT = 0;
-  let finished = false;
+  let running = false, finished = false, fell = false, carried = false;
+  let t = 0, pos = 0, lane = 1, px = 0, holding = false, walkT = 0, flowT = 0;
+  let penalty = 0, balance = 0, flash = '', flashT = 0;
+  let creatures = [], hits = [];
   let lastTs = performance.now();
   // Ripple streaks in the river. They drift leftward across the view, which is the current.
   const ripples = Array.from({ length: 70 }, (_, i) => ({
@@ -2174,7 +2178,7 @@
 
   const focal = () => W * 0.9;
   const horizon = () => H * 0.42;
-  // Perspective projection. x is sideways (camera follows the walker), y is height, z is distance ahead of the camera.
+  // Perspective projection. x is sideways (camera follows the walker), y is height, zr is distance ahead of the camera.
   function proj(x, y, zr) {
     const s = focal() / zr;
     return { sx: W / 2 + (x - px) * s, sy: horizon() + (CAM_H - y) * s, s };
@@ -2241,10 +2245,240 @@
     }
   }
 
+  // ---- Creatures ----
+  function buildRound() {
+    creatures = [];
+    let z = 9;
+    while (z < 22) {
+      const r = Math.random(), side = Math.random() < 0.5 ? -1 : 1;
+      let c;
+      if (r < 0.2) c = { kind: 'croc', x: side * 1.5, rise: 0 };
+      else if (r < 0.36) c = { kind: 'snake', x: side * 1.8 };
+      else if (r < 0.52) c = { kind: 'shark', side, jp: 0, passed: false };
+      else if (r < 0.66) c = { kind: 'hippo', x: side * 2.0 };
+      else c = { kind: 'spider', x: rnd(-0.5, 0.5) };
+      c.wz = z; c.side = side; c.state = c.state || 'hidden';
+      c.gone = false; c.attached = false;
+      creatures.push(c);
+      z += rnd(1.6, 2.6);
+    }
+    // Bad eagles swoop in from the sky, aiming at a random lane
+    for (let i = 0; i < 3; i++) {
+      creatures.push({ kind: 'eagle', wz: rnd(8, 22), x: LANE_X[Math.floor(Math.random() * 3)], state: 'hidden', gone: false, attached: false });
+    }
+    // The good eagle shows up at random, or not at all
+    if (Math.random() < 0.4) {
+      creatures.push({ kind: 'goodEagle', wz: rnd(12, 20), x: 0, phase: rnd(0, 6), state: 'hidden', gone: false, attached: false });
+    }
+  }
+
+  function setFlash(s) { flash = s; flashT = 2.5; }
+
+  function bite(c) {
+    c.attached = true; c.state = 'attached'; c.rise = 1;
+    penalty += BITE_PENALTY;
+    setFlash(`A ${NAME[c.kind]} bit you! +${BITE_PENALTY} s. Whack it off!`);
+  }
+
+  function bump(msg) {
+    balance++;
+    setFlash(`${msg} Balance ${balance}/${FALL_AT}`);
+    if (balance >= FALL_AT) fall();
+  }
+
+  function fall() {
+    running = false; fell = true; holding = false;
+    msgEl.textContent = 'You fell in the river!';
+    startEl.textContent = 'Try Again';
+    startEl.style.display = '';
+  }
+
+  function whack(c) {
+    if (c.kind === 'goodEagle') {
+      c.gone = true; carried = true;
+      setFlash('The good eagle grabs you and flies you across!');
+      return;
+    }
+    c.gone = true; c.attached = false;
+    setFlash(`Whacked the ${NAME[c.kind]}!`);
+  }
+
+  function updateCreatures(dt) {
+    creatures.forEach(c => {
+      if (c.gone || c.attached) return;
+      const zr = c.wz - pos;
+      if (zr < -1.5) { c.gone = true; return; }
+      switch (c.kind) {
+        case 'croc':
+          if (zr < 13) c.state = 'surface';
+          if (c.state === 'surface') c.rise = Math.min(1, c.rise + dt * 2.5);
+          if (c.state === 'surface' && zr < 1.8) bite(c);
+          break;
+        case 'snake':
+          if (zr < 14) c.state = 'surface';
+          if (c.state === 'surface' && Math.abs(c.x) > 0.02) c.x -= Math.sign(c.x) * Math.min(Math.abs(c.x), dt * 0.9);
+          if (c.state === 'surface' && zr < 2.2 && Math.abs(c.x) < 1.4) bite(c);
+          break;
+        case 'shark':
+          if (c.state === 'hidden' && zr < 7) { c.state = 'jump'; c.jp = 0; }
+          if (c.state === 'jump') {
+            c.jp += dt / 1.6;
+            if (!c.passed && c.jp >= 0.5) {
+              c.passed = true;
+              if (lane === 1 && Math.abs(zr) < 1.6) bite(c);
+            }
+            if (c.jp >= 1 && !c.attached) c.gone = true;
+          }
+          break;
+        case 'hippo':
+          if (zr < 13) c.state = 'surface';
+          if (c.state === 'surface' && zr < 3.2) { c.gone = true; bump('A hippo bumped the log!'); }
+          break;
+        case 'spider':
+          if (zr < 12) c.state = 'crawl';
+          if (c.state === 'crawl') {
+            c.wz -= dt * 0.45;
+            if (c.wz - pos < 2.0) bite(c);
+          }
+          break;
+        case 'eagle':
+          if (zr < 11) c.state = 'circle';
+          if (c.state === 'circle' && zr < 4.5) { c.gone = true; bump('A bad eagle pulled you off balance!'); }
+          break;
+        case 'goodEagle':
+          if (zr < 16) c.state = 'fly';
+          if (zr < 0.6) c.gone = true;
+          break;
+      }
+    });
+  }
+
+  function isVisible(c) {
+    if (c.gone || c.attached) return false;
+    if (c.state === 'hidden') return false;
+    if (c.kind === 'croc' && c.rise < 0.15) return false;
+    return true;
+  }
+
+  function drawEagle(gold) {
+    const f = Math.sin(flowT * 9) * 0.35;
+    if (gold) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(0, -0.1, 1.9, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.fillStyle = '#5a3b22';
+    ctx.beginPath(); ctx.moveTo(-0.1, -0.1); ctx.lineTo(-1.6, -0.6 - f); ctx.lineTo(-0.8, 0.05); ctx.lineTo(0, 0.05); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0.1, -0.1); ctx.lineTo(1.6, -0.6 - f); ctx.lineTo(0.8, 0.05); ctx.lineTo(0, 0.05); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f2ece0';
+    ctx.beginPath(); ctx.arc(-1.55, -0.6 - f, 0.12, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(1.55, -0.6 - f, 0.12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4a2f1b';
+    ctx.beginPath(); ctx.ellipse(0, 0, 0.32, 0.15, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f5f1e6';
+    ctx.beginPath(); ctx.arc(0.28, -0.14, 0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e0b13a';
+    ctx.beginPath(); ctx.moveTo(0.4, -0.18); ctx.lineTo(0.6, -0.12); ctx.lineTo(0.4, -0.06); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0.33, -0.17, 0.035, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Draws one creature at screen point (sx, sy) with unit size u, and records its tap area
+  function drawSprite(c, sx, sy, u) {
+    ctx.save(); ctx.translate(sx, sy); ctx.scale(u, u);
+    switch (c.kind) {
+      case 'croc': {
+        ctx.translate(0, (1 - c.rise) * 0.5);
+        ctx.fillStyle = '#4f7a2c';
+        ctx.beginPath(); ctx.ellipse(0, -0.2, 1.1, 0.22, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0.95, -0.22, 0.45, 0.22, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3e6122';
+        ctx.beginPath(); ctx.moveTo(0.55, -0.02); ctx.lineTo(1.4, -0.05); ctx.lineTo(1.25, 0.12); ctx.lineTo(0.5, 0.05); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff';
+        for (let i = 0; i < 4; i++) { const x = 0.7 + i * 0.2; ctx.beginPath(); ctx.moveTo(x, -0.02); ctx.lineTo(x + 0.07, -0.02); ctx.lineTo(x + 0.035, 0.07); ctx.closePath(); ctx.fill(); }
+        ctx.fillStyle = '#f4d03f'; ctx.beginPath(); ctx.arc(1.0, -0.38, 0.09, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(1.02, -0.38, 0.04, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'snake': {
+        ctx.strokeStyle = '#9acd32'; ctx.lineWidth = 0.16; ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let i = 0; i <= 20; i++) {
+          const x = -1.1 + i * 0.11, y = -0.1 + Math.sin(i * 0.9 + flowT * 6) * 0.12;
+          if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+        ctx.fillStyle = '#9acd32'; ctx.beginPath(); ctx.arc(1.1, -0.1, 0.16, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#d7263d'; ctx.lineWidth = 0.05;
+        ctx.beginPath(); ctx.moveTo(1.25, -0.1); ctx.lineTo(1.5, -0.16); ctx.moveTo(1.25, -0.1); ctx.lineTo(1.5, -0.04); ctx.stroke();
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(1.15, -0.16, 0.035, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'shark': {
+        ctx.fillStyle = '#6d7d8c';
+        ctx.beginPath(); ctx.moveTo(-0.1, -0.25); ctx.lineTo(0.2, -0.85); ctx.lineTo(0.35, -0.25); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-0.9, -0.2); ctx.lineTo(-1.5, -0.6); ctx.lineTo(-1.5, 0.1); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#7f8f9e'; ctx.beginPath(); ctx.ellipse(0, -0.2, 1.0, 0.28, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e8edf0'; ctx.beginPath(); ctx.ellipse(0.05, -0.06, 0.9, 0.12, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0.6, -0.27, 0.05, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'hippo': {
+        ctx.fillStyle = '#7d6f8f';
+        ctx.beginPath(); ctx.ellipse(0, -0.3, 1.0, 0.6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0.8, -0.5, 0.5, 0.35, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e58aa6'; ctx.beginPath(); ctx.ellipse(0.95, -0.3, 0.3, 0.12, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(1.0, -0.33); ctx.lineTo(1.12, -0.42); ctx.lineTo(1.05, -0.3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0.55, -0.85, 0.07, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'spider': {
+        ctx.strokeStyle = '#1d1d1d'; ctx.lineWidth = 0.07; ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const y = -0.5 + i * 0.12;
+          ctx.moveTo(0.1, -0.4); ctx.lineTo(0.5 + i * 0.05, y - 0.35); ctx.lineTo(0.9 - i * 0.05, y + 0.05);
+          ctx.moveTo(0.1, -0.4); ctx.lineTo(-0.3 - i * 0.05, y - 0.35); ctx.lineTo(-0.7 + i * 0.05, y + 0.05);
+        }
+        ctx.stroke();
+        ctx.fillStyle = '#1f1a1a';
+        ctx.beginPath(); ctx.ellipse(-0.25, -0.42, 0.36, 0.3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0.22, -0.46, 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(-0.25, -0.42, 0.08, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0.3, -0.52, 0.04, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'eagle': drawEagle(false); break;
+      case 'goodEagle': drawEagle(true); break;
+    }
+    ctx.restore();
+    hits.push({ c, cx: sx, cy: sy - 0.6 * u, hw: Math.max(1.6 * u, 22), hh: Math.max(1.1 * u, 20) });
+  }
+
+  // Draws a group of creatures far to near, at their world positions
+  function drawGroup(list) {
+    list.filter(isVisible).sort((a, b) => (b.wz - pos) - (a.wz - pos)).forEach(c => {
+      const zr = c.wz - pos;
+      if (zr < NEAR) return;
+      let x = c.x, y = WATER_Y;
+      if (c.kind === 'shark') { x = c.side * 3.4 * (1 - 2 * c.jp); y = WATER_Y + Math.sin(c.jp * Math.PI) * 2.2; }
+      if (c.kind === 'spider') y = LOG_Y;
+      if (c.kind === 'eagle') y = 2.6 - Math.min(1, Math.max(0, (11 - zr) / 7)) * 2.0;
+      if (c.kind === 'goodEagle') { x = Math.sin(flowT * 0.7 + c.phase) * 2.2; y = 2.4; }
+      const p = proj(x, y, zr);
+      drawSprite(c, p.sx, p.sy, p.s * SPRITE);
+    });
+  }
+
+  function drawAttached() {
+    const list = creatures.filter(c => c.attached && !c.gone);
+    const slots = [[-0.28, 0.7], [0.28, 0.7], [0, 0.5]];
+    const u = Math.min(W, H) * 0.11;
+    list.forEach((c, i) => {
+      const s = slots[i % slots.length];
+      drawSprite(c, W / 2 + s[0] * W, H * s[1], u);
+    });
+  }
+
   function drawPlayer() {
     const u = Math.min(W, H) * 0.09;
     const cx = W / 2, base = H * 0.9;
-    const step = holding && running ? Math.sin(walkT * 9) : 0;
+    const step = holding && running && !creatures.some(c => c.attached && !c.gone) ? Math.sin(walkT * 9) : 0;
     ctx.save(); ctx.translate(cx, base);
     ctx.strokeStyle = '#2a3a6a'; ctx.lineWidth = u * 0.28; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -2267,37 +2501,55 @@
     g = ctx.createLinearGradient(0, hz, 0, H);
     g.addColorStop(0, '#3d6b4a'); g.addColorStop(1, '#1d3a28');
     ctx.fillStyle = g; ctx.fillRect(0, hz, W, H - hz);
+    hits = [];
     drawTreeBand();
     drawWorld();
+    const water = creatures.filter(c => ['croc', 'hippo'].includes(c.kind));
+    drawGroup(water);
     drawLog();
+    drawGroup(creatures.filter(c => ['snake', 'spider', 'shark', 'eagle', 'goodEagle'].includes(c.kind)));
+    drawAttached();
     drawPlayer();
   }
 
   function finish() {
     running = false; finished = true; holding = false;
-    msgEl.textContent = `Across the river in ${t.toFixed(1)} s!`;
+    const total = t + penalty;
+    msgEl.textContent = `Across! ${t.toFixed(1)} s + ${penalty} s penalty = ${total.toFixed(1)} s`;
     startEl.textContent = 'Cross Again';
     startEl.style.display = '';
   }
 
   function update(dt) {
+    if (flashT > 0) { flashT -= dt; if (flashT <= 0) flash = ''; }
     if (!running) return;
     t += dt;
     px += (LANE_X[lane] - px) * Math.min(1, dt * 10);
-    if (holding) { pos += SPEED * dt; walkT += dt; }
+    const attachedN = creatures.filter(c => c.attached && !c.gone).length;
+    if (carried) pos += 10 * dt;
+    else if (holding && attachedN === 0) { pos += SPEED * dt; walkT += dt; }
+    updateCreatures(dt);
     if (pos >= FINISH) finish();
   }
 
   function updateHud() {
     timeEl.textContent = t.toFixed(1);
-    penEl.textContent = 0;
-    if (finished) return;
-    if (running) msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
+    penEl.textContent = penalty;
+    if (finished || fell) return;
+    if (flash && flashT > 0) { msgEl.textContent = flash; return; }
+    if (running) {
+      const attachedN = creatures.filter(c => c.attached && !c.gone).length;
+      msgEl.textContent = attachedN
+        ? 'Tap the creature on you to shake it off!'
+        : `Hold to walk. Tap a side to step. Balance ${balance}/${FALL_AT}`;
+    }
   }
 
   sc.addEventListener('pointerdown', e => {
     if (e.target.closest('.sign, button')) return;
-    if (!running) return;
+    const hit = hits.slice().reverse().find(h => Math.abs(e.clientX - h.cx) < h.hw && Math.abs(e.clientY - h.cy) < h.hh);
+    if (hit && running) { whack(hit.c); return; }
+    if (!running || carried) return;
     holding = true;
     if (e.clientX < W * 0.35 && lane > 0) lane--;
     else if (e.clientX > W * 0.65 && lane < 2) lane++;
@@ -2307,10 +2559,13 @@
 
   startEl.addEventListener('click', () => {
     t = 0; pos = 0; lane = 1; px = 0; walkT = 0;
-    finished = false; holding = false;
+    penalty = 0; balance = 0; carried = false;
+    finished = false; fell = false; holding = false;
+    flash = ''; flashT = 0;
+    buildRound();
     running = true;
     startEl.style.display = 'none';
-    msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
+    msgEl.textContent = 'Hold to walk. Tap a side to step.';
   });
 
   function goRiver() {
