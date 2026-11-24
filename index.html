@@ -52,7 +52,8 @@
              radial-gradient(ellipse at 30% 20%, #5f9e4a, #3c7a36 70%);
            box-shadow: inset 0 0 40px rgba(0,0,0,.35), 0 10px 24px rgba(0,0,0,.35); }
   .layer { position:absolute; inset:0; pointer-events:none; }
-  #ants { z-index:1; }
+  /* Ants cover the whole screen, above the background and below grass tufts and holes */
+  #ants { position:fixed; inset:0; z-index:1; overflow:hidden; pointer-events:none; }
   #tufts { z-index:2; }
   .ant { position:absolute; width:14px; height:10px; }
   .tuft { position:absolute; width:34px; height:26px; }
@@ -116,16 +117,16 @@
 </style>
 </head>
 <body>
+  <div class="screen-ants" id="ants"></div>
   <h1>🔨 Whack-a-Mole</h1>
   <div class="hud">
     <div>Score <b id="score">0</b></div>
-    <div>Time <b id="time">30</b></div>
+    <div>Time <b id="time">60</b></div>
     <div>Best <b id="best">0</b></div>
   </div>
   <div class="bonus" id="bonus">+5 BONUS! 10 hits in a row</div>
   <div class="stage">
     <div class="field" id="field">
-      <div class="layer" id="ants"></div>
       <div class="layer" id="tufts"></div>
       <div class="board" id="board"></div>
     </div>
@@ -154,7 +155,7 @@
 
 <script>
 (function () {
-  const GAME_TIME = 30;
+  const GAME_TIME = 60;
   const HOLES = 9;
   const BLUE_CHANCE = 0.08;   // chance a pop is a blue mole
   const BLUE_AFTER = 5;       // seconds before blue moles can appear
@@ -229,32 +230,39 @@
     tuftsLayer.appendChild(t);
   }
 
-  // 25 ants wandering behind the grass and under the holes
+  // 125 ants crawling over the whole screen. Positions are in pixels so the
+  // direction each ant faces matches its movement on any screen shape.
   const ants = [];
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 125; i++) {
     const el = document.createElement('div');
     el.className = 'ant';
     el.innerHTML = ANT_SVG;
     antsLayer.appendChild(el);
-    ants.push({ el, x: rand(3, 97), y: rand(3, 97), tx: rand(3, 97), ty: rand(3, 97), speed: rand(5, 11), angle: 0 });
+    ants.push({
+      el,
+      x: rand(0, window.innerWidth), y: rand(0, window.innerHeight),
+      tx: rand(0, window.innerWidth), ty: rand(0, window.innerHeight),
+      speed: rand(25, 60), angle: 0
+    });
   }
 
   let lastTs = performance.now();
   function antLoop(ts) {
     const dt = Math.min(0.05, (ts - lastTs) / 1000);
     lastTs = ts;
+    const W = window.innerWidth, H = window.innerHeight;
     ants.forEach(a => {
       const dx = a.tx - a.x, dy = a.ty - a.y, dist = Math.hypot(dx, dy);
-      if (dist < 2) {
-        a.tx = rand(3, 97); a.ty = rand(3, 97);
+      if (dist < 4) {
+        a.tx = rand(0, W); a.ty = rand(0, H);
       } else {
         const step = Math.min(dist, a.speed * dt);
         a.x += dx / dist * step;
         a.y += dy / dist * step;
         a.angle = Math.atan2(dy, dx) * 180 / Math.PI;
       }
-      a.el.style.left = a.x + '%';
-      a.el.style.top = a.y + '%';
+      a.el.style.left = a.x + 'px';
+      a.el.style.top = a.y + 'px';
       a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
     });
     requestAnimationFrame(antLoop);
@@ -265,11 +273,12 @@
 
   // Difficulty: moles stay up and spawn faster as time passes
   function currentDifficulty() {
-    const elapsed = GAME_TIME - timeLeft;
+    // Ramp by fraction of the round, so the longer game eases in and ends at the same pace as before
+    const progress = (GAME_TIME - timeLeft) / GAME_TIME;   // 0 at the start, 1 at the end
     return {
-      upTime: Math.max(550, 1400 - elapsed * 30),
-      spawnDelay: Math.max(280, 1000 - elapsed * 25),
-      extra: elapsed > 15 ? 1 : 0   // occasionally pop two at once late in the game
+      upTime: Math.max(550, 1400 - progress * 850),
+      spawnDelay: Math.max(280, 1000 - progress * 720),
+      extra: progress > 0.5 ? 1 : 0   // occasionally pop two at once in the second half
     };
   }
 
