@@ -87,7 +87,7 @@
   }
 
   /* Worm: sits on the ants layer, so the grass tufts cover it */
-  .worm { position:absolute; width:70px; height:14px; }
+  .worm { position:absolute; width:70px; height:14px; transition: opacity .4s ease; }
   .worm svg { display:block; width:100%; height:100%; overflow:visible; }
   .worm ellipse { animation: wiggle 1s ease-in-out infinite alternate; }
   @keyframes wiggle { from { transform:translateY(-1.5px); } to { transform:translateY(1.5px); } }
@@ -186,7 +186,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.7</div>
+  <div class="ver-tag">v1.8</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -385,29 +385,62 @@
       `<ellipse cx="${cx}" cy="7" rx="7" ry="5.5" fill="${i % 2 ? '#6b3f1f' : '#7d4a26'}" stroke="#3d2411" stroke-width=".8" style="animation-delay:-${(i * 0.2).toFixed(1)}s"/>`
     ).join('') +
     `<circle cx="64" cy="7" r="5" fill="#8a5630" stroke="#3d2411" stroke-width=".8"/></svg>`;
-  const wormEl = document.createElement('div');
-  wormEl.className = 'worm';
-  wormEl.innerHTML = WORM_SVG;
-  antsLayer.appendChild(wormEl);
-  const worm = { x: rand(0, window.innerWidth), y: rand(0, window.innerHeight), heading: rand(0, Math.PI * 2), turn: 0, phase: 0 };
+  // Three worms slither under the grass. Now and then one burrows out of sight and comes up a short way off
+  const worms = [];
+  for (let i = 0; i < 3; i++) {
+    const el = document.createElement('div');
+    el.className = 'worm';
+    el.innerHTML = WORM_SVG;
+    antsLayer.appendChild(el);
+    worms.push({
+      el, x: rand(0, window.innerWidth), y: rand(0, window.innerHeight),
+      heading: rand(0, Math.PI * 2), turn: 0, phase: rand(0, 10),
+      burrowIn: rand(8, 16),           // seconds until it next burrows
+      burrowLeft: 0                    // seconds left underground (0 = above ground)
+    });
+  }
+  function placeWorm(w) {
+    w.el.style.left = w.x + 'px';
+    w.el.style.top = w.y + 'px';
+    w.el.style.transform = `translate(-50%,-50%) rotate(${(w.heading + Math.sin(w.phase * 3) * 0.15) * 180 / Math.PI}deg)`;
+  }
   // Wanders gently with a slithering sway; turns back toward the middle near the edges
-  function moveWorm(dt) {
+  function moveWorm(w, dt) {
     const W = window.innerWidth, H = window.innerHeight;
-    worm.phase += dt;
-    worm.turn = (worm.turn + (Math.random() - 0.5) * dt * 0.8) * 0.98;
-    worm.heading += worm.turn * dt;
-    if (worm.x < 40 || worm.x > W - 40 || worm.y < 40 || worm.y > H - 40) {
-      const toward = Math.atan2(H / 2 - worm.y, W / 2 - worm.x);
-      const diff = ((toward - worm.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-      worm.heading += diff * Math.min(1, dt * 1.5);
+    w.phase += dt;
+    if (w.burrowLeft > 0) {
+      // Underground: hidden while it gets ready to come up
+      w.burrowLeft -= dt;
+      if (w.burrowLeft <= 0) {
+        // Come up a short way off, in a random direction
+        const ang = rand(0, Math.PI * 2), r = rand(60, 120);
+        w.x = Math.min(W - 30, Math.max(30, w.x + Math.cos(ang) * r));
+        w.y = Math.min(H - 30, Math.max(30, w.y + Math.sin(ang) * r));
+        w.el.style.opacity = '1';
+        w.burrowIn = rand(8, 16);
+      }
+      placeWorm(w);
+      return;
     }
-    const sway = Math.sin(worm.phase * 3) * 0.15;
+    w.burrowIn -= dt;
+    if (w.burrowIn <= 0) {
+      w.burrowLeft = rand(1.2, 2);
+      w.el.style.opacity = '0';
+      placeWorm(w);
+      return;
+    }
+    w.turn = (w.turn + (Math.random() - 0.5) * dt * 0.8) * 0.98;
+    w.heading += w.turn * dt;
+    if (w.x < 40 || w.x > W - 40 || w.y < 40 || w.y > H - 40) {
+      const toward = Math.atan2(H / 2 - w.y, W / 2 - w.x);
+      const diff = ((toward - w.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      w.heading += diff * Math.min(1, dt * 1.5);
+    }
+    const sway = Math.sin(w.phase * 3) * 0.15;
     const speed = 10;                                   // pixels per second: a slow crawl
-    worm.x += Math.cos(worm.heading + sway) * speed * dt;
-    worm.y += Math.sin(worm.heading + sway) * speed * dt;
-    wormEl.style.left = worm.x + 'px';
-    wormEl.style.top = worm.y + 'px';
-    wormEl.style.transform = `translate(-50%,-50%) rotate(${(worm.heading + sway) * 180 / Math.PI}deg)`;
+    w.x += Math.cos(w.heading + sway) * speed * dt;
+    w.y += Math.sin(w.heading + sway) * speed * dt;
+    placeWorm(w);
   }
 
   let lastTs = performance.now();
@@ -463,7 +496,7 @@
       a.el.style.top = a.y + 'px';
       a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
     });
-    moveWorm(dt);
+    worms.forEach(w => moveWorm(w, dt));
     requestAnimationFrame(antLoop);
   }
   requestAnimationFrame(antLoop);
