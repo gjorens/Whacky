@@ -51,6 +51,16 @@
   #ants { position:fixed; inset:0; z-index:1; overflow:hidden; pointer-events:none; }
   /* Grass tufts cover the whole screen: above the ants, below the holes and text */
   #tufts { position:absolute; top:0; left:0; width:100%; z-index:2; overflow:hidden; pointer-events:none; }
+  /* Ladybugs sit above the grass and below the holes and text */
+  #bugs { position:fixed; inset:0; z-index:2; overflow:hidden; pointer-events:none; }
+  .bug { position:absolute; width:26px; height:26px; }
+  .bug svg { display:block; width:100%; height:100%; overflow:visible; }
+  .bug .wing { display:none; transform-box:fill-box; transform-origin:center; }
+  .bug.flying .wing { display:inline; animation: flap .08s linear infinite alternate; }
+  .bug.flying svg { filter: drop-shadow(6px 9px 3px rgba(0,0,0,.35)); }
+  .bug.walking svg { animation: waddle .35s ease-in-out infinite alternate; }
+  @keyframes flap { from { transform:scaleY(1); } to { transform:scaleY(.35); } }
+  @keyframes waddle { from { transform:translateY(-1px); } to { transform:translateY(1px); } }
   .ant { position:absolute; width:14px; height:10px; }
   .tuft { position:absolute; width:34px; height:26px; }
 
@@ -152,6 +162,7 @@
   </svg>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
+  <div class="screen-bugs" id="bugs"></div>
   <h1>🔨 Whack-a-Mole</h1>
   <div class="hud">
     <div>Score <b id="score">0</b></div>
@@ -345,6 +356,87 @@
     requestAnimationFrame(antLoop);
   }
   requestAnimationFrame(antLoop);
+
+  // ---- Ladybugs: each one walks, then flies somewhere, then rests ----
+  const bugsLayer = document.getElementById('bugs');
+  const BUG_SVG = `<svg viewBox="0 0 40 40">
+      <ellipse cx="23" cy="20" rx="16" ry="14" fill="#d8322b"/>
+      <path d="M23 6.5 V33.5" stroke="#1b1410" stroke-width="1.2"/>
+      <g fill="#1b1410">
+        <circle cx="16" cy="13" r="2.8"/><circle cx="29" cy="12" r="2.8"/>
+        <circle cx="15" cy="25" r="2.8"/><circle cx="30" cy="27" r="2.8"/><circle cx="23" cy="20" r="2.4"/>
+      </g>
+      <circle cx="6" cy="20" r="4.5" fill="#1b1410"/>
+      <ellipse class="wing" cx="23" cy="12" rx="13" ry="5" fill="#e6f3ff" opacity=".6"/>
+      <ellipse class="wing" cx="23" cy="28" rx="13" ry="5" fill="#e6f3ff" opacity=".6"/>
+    </svg>`;
+
+  function setBugState(b, state) {
+    const W = window.innerWidth, H = window.innerHeight;
+    b.state = state;
+    b.el.classList.toggle('walking', state === 'walk');
+    b.el.classList.toggle('flying', state === 'fly');
+    if (state === 'walk') {
+      b.speed = rand(25, 45);
+      b.timer = rand(3, 6);                  // seconds of walking before it takes off
+      b.tx = rand(0, W); b.ty = rand(0, H);
+    } else if (state === 'fly') {
+      b.speed = rand(180, 260);
+      b.tx = rand(0, W); b.ty = rand(0, H);
+    } else {
+      b.speed = 0;
+      b.timer = rand(2, 4);                  // seconds resting
+    }
+  }
+
+  const bugs = [];
+  for (let i = 0; i < 15; i++) {
+    const el = document.createElement('div');
+    el.className = 'bug';
+    el.innerHTML = BUG_SVG;
+    bugsLayer.appendChild(el);
+    const b = { el, x: rand(0, window.innerWidth), y: rand(0, window.innerHeight), tx: 0, ty: 0, speed: 0, angle: 0, state: 'walk', timer: 0 };
+    setBugState(b, 'walk');
+    bugs.push(b);
+  }
+
+  let bugTs = performance.now();
+  function bugLoop(ts) {
+    const dt = Math.min(0.05, (ts - bugTs) / 1000);
+    bugTs = ts;
+    const W = window.innerWidth, H = window.innerHeight;
+    bugs.forEach(b => {
+      if (b.state === 'rest') {
+        b.timer -= dt;
+        if (b.timer <= 0) setBugState(b, 'walk');
+      } else {
+        const dx = b.tx - b.x, dy = b.ty - b.y, dist = Math.hypot(dx, dy);
+        if (b.state === 'walk') {
+          b.timer -= dt;
+          if (dist < 4) { b.tx = rand(0, W); b.ty = rand(0, H); }
+          else moveBug(b, dx, dy, dist, dt);
+          if (b.timer <= 0) setBugState(b, 'fly');
+        } else if (dist < 6) {
+          setBugState(b, 'rest');                // landed
+        } else {
+          moveBug(b, dx, dy, dist, dt);
+        }
+      }
+      b.el.style.left = b.x + 'px';
+      b.el.style.top = b.y + 'px';
+      // The head is on the left of the sprite, so add 180 degrees to face the direction of travel
+      b.el.style.transform = `translate(-50%,-50%) rotate(${b.angle + 180}deg)`;
+    });
+    requestAnimationFrame(bugLoop);
+  }
+
+  function moveBug(b, dx, dy, dist, dt) {
+    const step = Math.min(dist, b.speed * dt);
+    b.x += dx / dist * step;
+    b.y += dy / dist * step;
+    b.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  }
+  requestAnimationFrame(bugLoop);
 
   function setScore(n) { score = n; scoreEl.textContent = score; }
 
