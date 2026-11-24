@@ -35,6 +35,23 @@
   .hole.miss { animation:shake .2s; }
   @keyframes shake { 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
 
+  /* Earthquake: whole screen shakes, moles freeze with hands raised */
+  .mole .hands { display:none; }
+  .mole.frozen .hands { display:block; }
+  .hands i { position:absolute; top:4%; width:24%; height:22%; background:#f2c79b; border:2px solid #8a5a33;
+             border-radius:50%; box-sizing:border-box; }
+  .hands i:first-child { left:-10%; }
+  .hands i:last-child { right:-10%; }
+  .mole.blue .hands i { background:#bfe4ff; border-color:#1d4f99; }
+  body.quake { animation: quakeShake .08s linear infinite; }
+  @keyframes quakeShake {
+    0%   { transform:translate(0,0); }
+    25%  { transform:translate(-6px,3px); }
+    50%  { transform:translate(5px,-4px); }
+    75%  { transform:translate(-3px,-5px); }
+    100% { transform:translate(0,0); }
+  }
+
   /* Game Over banner: slams in, then melts downward */
   .banner { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
             pointer-events:none; z-index:10; }
@@ -88,6 +105,10 @@
   let spawnTimer = null, tickTimer = null;
   let best = 0;
   let audioCtx = null;
+  let quakeActive = false, quakeTimer = null;
+  const QUAKE_LENGTH = 3000;   // ms
+  const QUAKE_AFTER = 8;       // seconds before earthquakes can happen
+  const QUAKE_CHANCE = 0.04;   // chance per spawn tick
   let streak = 0;            // consecutive normal-mole hits
   let bonusTimer = null;
   const STREAK_BONUS_AT = 10;
@@ -106,6 +127,10 @@
     const nose = document.createElement('div');
     nose.className = 'nose';
     mole.appendChild(nose);
+    const hands = document.createElement('div');
+    hands.className = 'hands';
+    hands.innerHTML = '<i></i><i></i>';
+    mole.appendChild(hands);
     hole.appendChild(mole);
     hole.addEventListener('pointerdown', () => onWhack(i));
     boardEl.appendChild(hole);
@@ -125,7 +150,7 @@
   }
 
   function popMole() {
-    if (!running) return;
+    if (!running || quakeActive) return;
     const { upTime, extra } = currentDifficulty();
     const elapsed = GAME_TIME - timeLeft;
     const count = 1 + (extra && Math.random() < 0.3 ? 1 : 0);
@@ -183,6 +208,46 @@
     }
   }
 
+  // Earthquakes: random chance after a while, lasting 3 seconds
+  function maybeQuake() {
+    const elapsed = GAME_TIME - timeLeft;
+    if (!quakeActive && elapsed >= QUAKE_AFTER && Math.random() < QUAKE_CHANCE) startQuake();
+  }
+
+  function startQuake() {
+    quakeActive = true;
+    document.body.classList.add('quake');
+    holes.forEach(h => {
+      if (h.mole.classList.contains('up')) {
+        clearTimeout(h.hideTimer);          // freeze moles that are up
+        h.mole.classList.add('frozen');     // hands over heads
+      }
+    });
+    msgEl.textContent = 'EARTHQUAKE! Hold on!';
+    clearTimeout(quakeTimer);
+    quakeTimer = setTimeout(endQuake, QUAKE_LENGTH);
+  }
+
+  function endQuake() {
+    quakeActive = false;
+    document.body.classList.remove('quake');
+    holes.forEach((h, i) => {
+      h.mole.classList.remove('frozen');
+      if (h.mole.classList.contains('up')) {
+        clearTimeout(h.hideTimer);
+        h.hideTimer = setTimeout(() => hide(i), 700);   // let them hide soon after
+      }
+    });
+    if (running) msgEl.textContent = 'Phew! Back to whacking.';
+  }
+
+  function stopQuake() {
+    clearTimeout(quakeTimer);
+    quakeActive = false;
+    document.body.classList.remove('quake');
+    holes.forEach(h => h.mole.classList.remove('frozen'));
+  }
+
   // Shows the streak bonus above the board for 3 seconds
   function showBonus() {
     bonusEl.classList.add('show');
@@ -204,6 +269,7 @@
     const { spawnDelay } = currentDifficulty();
     spawnTimer = setTimeout(() => {
       popMole();
+      maybeQuake();
       scheduleSpawn();
     }, spawnDelay * (0.7 + Math.random() * 0.6));
   }
@@ -298,6 +364,7 @@
     streak = 0;
     clearTimeout(bonusTimer);
     bonusEl.classList.remove('show');
+    stopQuake();
     timeLeft = GAME_TIME;
     timeEl.textContent = timeLeft;
     msgEl.textContent = 'Go! Watch for blue moles!';
@@ -316,6 +383,7 @@
     running = false;
     clearInterval(tickTimer);
     clearTimeout(spawnTimer);
+    stopQuake();
     holes.forEach((h, i) => hide(i));
     const newBest = score > best;
     if (newBest) {
