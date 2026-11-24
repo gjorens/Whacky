@@ -260,7 +260,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.25</div>
+  <div class="ver-tag">v1.26</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -311,8 +311,13 @@
       <radialGradient id="boulderG" cx=".35" cy=".3" r=".8">
         <stop offset="0" stop-color="#a09589"/><stop offset="1" stop-color="#4b4138"/>
       </radialGradient>
+      <linearGradient id="floorG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b4037"/><stop offset="1" stop-color="#261f19"/></linearGradient>
+      <linearGradient id="cylG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".5"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".5" stop-color="#ffe9c4" stop-opacity=".12"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient>
     </defs>
     <image href="rock.webp" x="0" y="0" width="400" height="1000" preserveAspectRatio="none"/>
+    <!-- The wall stands in a half-cylinder hollow: its base dips in the middle, so the floor is a semicircle -->
+    <path d="M0 640 Q200 960 400 640 L400 1000 L0 1000 Z" fill="url(#floorG)"/>
+    <rect width="400" height="1000" fill="url(#cylG)"/>
     <g fill="#8a7e72" opacity=".25">
       <ellipse cx="60" cy="150" rx="55" ry="24"/><ellipse cx="330" cy="290" rx="48" ry="20"/>
       <ellipse cx="120" cy="520" rx="60" ry="26"/><ellipse cx="300" cy="700" rx="52" ry="22"/>
@@ -1583,10 +1588,14 @@
 // ---- Scene 2: Whack-a-Bear. A rock wall with seven caves. Brown bears take two whacks; the polar bear ends the game ----
 (function () {
   const GAME_TIME2 = 60;
-  const CAVES = [
-    { x: 16, y: 190 }, { x: 39, y: 190 }, { x: 61, y: 190 }, { x: 84, y: 190 },   // bottom row
-    { x: 27, y: 78 }, { x: 50, y: 78 }, { x: 73, y: 78 }                          // higher up
-  ];
+  // Caves are placed at random each round, spaced apart so they never overlap
+  function cavePositions() {
+    // Evenly spaced slots with a small random shift, so caves are always apart but never in the same place twice
+    const slots = (n, lo, hi, jitter) => Array.from({ length: n }, (_, i) => lo + (hi - lo) * i / (n - 1) + rnd(-jitter, jitter));
+    const bottom = slots(4, 6, 88, 2.5).map(x => ({ x, y: rnd(170, 200) }));
+    const top = slots(3, 14, 86, 4).map(x => ({ x, y: rnd(50, 90) }));
+    return bottom.concat(top);
+  }
   const GREENS2 = ['#2e6b2a', '#4f9a3c', '#7cc15a', '#3f8a33'];
   const $ = id => document.getElementById(id);
   const scene1 = $('scene1'), scene2 = $('scene2');
@@ -1687,7 +1696,7 @@
   function buildCaves() {
     cavesEl.innerHTML = '';
     caves.length = 0;
-    CAVES.forEach(pos => {
+    cavePositions().forEach(pos => {
       const d = caveD();
       const el = document.createElement('div');
       el.className = 'cave';
@@ -1793,6 +1802,7 @@
   function startGame2() {
     if (running2) return;
     running2 = true;
+    buildCaves();   // new cave layout for each round
     score2 = 0; hits2 = 0; misses2 = 0; timeLeft2 = GAME_TIME2; elapsed2 = 0;
     spawnCd = 1; quakeCd = rnd(8, 14); quakeLeft = 0; lastSec = -1;
     caves.forEach(c => { c.bear = null; c.sprite.style.transform = 'translateY(100%)'; });
