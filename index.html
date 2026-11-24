@@ -81,6 +81,19 @@
     100% { transform:translate(0,0); }
   }
 
+  /* 3-2-1 countdown: big numbers with wings that flap as they fly away */
+  .countdown { position:fixed; inset:0; pointer-events:none; z-index:9; }
+  .count-num { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:1.35in; font-weight:900;
+               line-height:1; color:var(--accent); text-shadow:0 6px 0 #7a5a00, 0 0 30px rgba(0,0,0,.5); white-space:nowrap; }
+  .count-wing { position:absolute; top:50%; width:.85in; height:.6in; margin-top:-.3in; }
+  .count-wing svg { width:100%; height:100%; display:block; }
+  .count-wing.l { right:100%; margin-right:-.15in; }
+  .count-wing.r { left:100%; margin-left:-.15in; }
+  .count-wing.l svg { transform-origin:100% 50%; animation: flapL .11s ease-in-out infinite alternate; }
+  .count-wing.r svg { transform-origin:0% 50%; animation: flapR .11s ease-in-out infinite alternate; }
+  @keyframes flapL { from { transform:rotate(-30deg); } to { transform:rotate(12deg); } }
+  @keyframes flapR { from { transform:rotate(30deg); } to { transform:rotate(-12deg); } }
+
   /* Game Over banner: slams in, then melts downward */
   .banner { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
             pointer-events:none; z-index:10; }
@@ -164,11 +177,7 @@
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
   <h1>🔨 Whack-a-Mole</h1>
-  <div class="hud">
-    <div>Score <b id="score">0</b></div>
-    <div>Time <b id="time">60</b></div>
-    <div>Best <b id="best">0</b></div>
-  </div>
+  <div class="msg" id="msg">Click the moles before they hide! Misses cost you 1 point. Watch out for blue moles!</div>
   <div class="bonus" id="bonus">+5 BONUS! 10 hits in a row</div>
   <div class="stage">
     <div class="field" id="field">
@@ -184,7 +193,12 @@
     </div>
   </div>
   <button id="startBtn">Start Game</button>
-  <div class="msg" id="msg">Click the moles before they hide! Misses cost you 1 point. Watch out for blue moles!</div>
+  <div class="hud">
+    <div>Score <b id="score">0</b></div>
+    <div>Time <b id="time">60</b></div>
+    <div>Best <b id="best">0</b></div>
+  </div>
+  <div class="countdown" id="countdown"></div>
   <div class="banner" id="banner"><span>GAME OVER</span></div>
 
   <section class="lb">
@@ -222,6 +236,7 @@
   let spawnTimer = null, tickTimer = null;
   let best = 0;
   let audioCtx = null;
+  let countingDown = false;
   let quakeActive = false, quakeTimer = null;
   const QUAKE_LENGTH = 3000;   // ms
   const QUAKE_AFTER = 8;       // seconds before earthquakes can happen
@@ -744,7 +759,91 @@
     bannerEl.classList.add('show');
   }
 
+  // ---- 3-2-1 countdown ----
+  const countdownEl = document.getElementById('countdown');
+  const WING_SVG = `<svg viewBox="0 0 60 40"><ellipse cx="30" cy="20" rx="27" ry="16" fill="rgba(230,243,255,.8)" stroke="#ffffff" stroke-width="1.5"/><path d="M12 20 H48" stroke="rgba(120,160,200,.7)" stroke-width="1"/></svg>`;
+
+  function playBeep(freq) {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.3, t0 + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.22);
+  }
+
+  // Wings whoosh: swept band-pass noise with a fast flutter
+  function playWingWhoosh() {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime, dur = 0.9;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 1.5;
+    band.frequency.setValueAtTime(400, t0);
+    band.frequency.exponentialRampToValueAtTime(3000, t0 + dur);
+    const flutter = ctx.createGain();
+    flutter.gain.setValueAtTime(1, t0);
+    for (let t = 0; t < dur; t += 0.045) {
+      flutter.gain.setValueAtTime((Math.round(t / 0.045) % 2) ? 0.25 : 1, t0 + t);
+    }
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t0);
+    env.gain.exponentialRampToValueAtTime(0.5, t0 + 0.15);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(band).connect(flutter).connect(env).connect(ctx.destination);
+    src.start(t0);
+    src.stop(t0 + dur);
+  }
+
+  // One number: pops in, holds, then flies off in a random direction with flapping wings
+  function flyNumber(text, freq) {
+    const el = document.createElement('div');
+    el.className = 'count-num';
+    el.innerHTML = `<span class="count-wing l">${WING_SVG}</span>${text}<span class="count-wing r">${WING_SVG}</span>`;
+    countdownEl.appendChild(el);
+    playBeep(freq);
+    const far = Math.max(window.innerWidth, window.innerHeight) * 1.2;
+    const a = rand(0, Math.PI * 2);
+    const dx = Math.cos(a) * far, dy = Math.sin(a) * far, rot = rand(-150, 150);
+    const anim = el.animate([
+      { transform: 'translate(-50%,-50%) scale(.2)', opacity: 0 },
+      { transform: 'translate(-50%,-50%) scale(1.15)', opacity: 1, offset: .22 },
+      { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: .35 },
+      { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: .55, easing: 'ease-in' },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}deg) scale(.7)`, opacity: 0 }
+    ], { duration: 1200, fill: 'forwards' });
+    setTimeout(playWingWhoosh, 660);
+    anim.onfinish = () => el.remove();
+  }
+
+  function runCountdown(done) {
+    countingDown = true;
+    startBtn.style.display = 'none';
+    msgEl.textContent = 'Get ready!';
+    const steps = ['3', '2', '1'];
+    steps.forEach((label, i) => setTimeout(() => flyNumber(label, 440 + i * 80), i * 1200));
+    setTimeout(() => { countingDown = false; done(); }, steps.length * 1200 - 300);
+  }
+
   function startGame() {
+    if (running || countingDown) return;
+    runCountdown(beginRound);
+  }
+
+  function beginRound() {
     if (running) return;
     running = true;
     setScore(0);
