@@ -380,7 +380,8 @@
           return;
         }
         a.scaredUntil = 0;
-        a.huntTimer = 0;                 // back to hunting right away
+        a.tx = rand(0, W); a.ty = rand(0, H);   // stop fleeing: wander off from here
+        a.huntTimer = 0;                 // and resume hunting right away
       }
       if (a.cluster) {
         // Attached ants hold on to their ladybug and move with it
@@ -587,11 +588,15 @@
     b.riders = 0;
   }
   // A point further away from the ladybug that scared this ant
+  // Always a point ahead of the ant, pointing away from the ladybug, so it keeps moving
   function fleeTarget(a) {
     const from = a.scareFrom;
-    const ang = Math.atan2(a.y - from.y, a.x - from.x) + rand(-0.6, 0.6);
-    const r = rand(90, 150);
-    a.tx = from.x + Math.cos(ang) * r; a.ty = from.y + Math.sin(ang) * r;
+    const W = window.innerWidth, H = window.innerHeight;
+    const d = Math.hypot(a.x - from.x, a.y - from.y);
+    const ang = d < 1 ? rand(0, Math.PI * 2) : Math.atan2(a.y - from.y, a.x - from.x) + rand(-0.5, 0.5);
+    const r = rand(70, 120);
+    a.tx = Math.min(W - 4, Math.max(4, a.x + Math.cos(ang) * r));
+    a.ty = Math.min(H - 4, Math.max(4, a.y + Math.sin(ang) * r));
   }
   function moveAnt(a, tx, ty, speed, dt) {
     const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
