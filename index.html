@@ -276,7 +276,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.31</div>
+  <div class="ver-tag">v1.32</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -389,7 +389,7 @@
 <div id="scene3" style="display:none">
   <canvas id="canyon-cv"></canvas>
   <div class="s3-hud">Time <b id="s3-time">0.0</b> &nbsp; Penalty <b id="s3-pen">0</b>s</div>
-  <div class="s3-msg" id="s3-msg">Walk the log to the far side. Hold to walk, tap a side to step.</div>
+  <div class="s3-msg" id="s3-msg">Cross the river on the log. Hold to walk, tap a side to step.</div>
   <button id="s3-start">Start Run</button>
   <div class="sign" id="toCavesFromCanyon"><i class="post"></i><i class="crack"></i><i class="knot"></i><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px;margin-right:4px"><path d="M12 12 L2 2 M2 7 V2 H7" fill="none" stroke="#2e1a0b" stroke-width="2.4" stroke-linecap="round"/></svg>To Caves</span></div>
 </div>
@@ -2140,20 +2140,24 @@
 </script>
 
 <script>
-// ---- Scene 3: The Canyon. A timed run along a fallen log, drawn in simple 3D on a canvas ----
+// ---- Scene 3: River Crossing. Walk a log across a river, drawn in simple 3D on a canvas ----
 (function () {
   const sc = document.getElementById('scene3');
   const scene1El = document.getElementById('scene1'), scene2El = document.getElementById('scene2');
   const cv = document.getElementById('canyon-cv'), ctx = cv.getContext('2d');
   const timeEl = document.getElementById('s3-time'), penEl = document.getElementById('s3-pen');
   const msgEl = document.getElementById('s3-msg'), startEl = document.getElementById('s3-start');
-  const LOG_LEN = 60, CAM_H = 1.6, SPEED = 2.2, SQ_SPEED = 3.5, PENALTY = 3, SHAKES = 3;
-  const LANE_X = [-0.9, 0, 0.9];
+  const RIVER_LEN = 60, CAM_H = 1.6, SPEED = 2.2;
+  const RIVER_HALF = 3;                       // water runs from x=-3 to x=3, banks beyond
+  const LOG_HALF = 0.9, LANE_X = [-0.6, 0, 0.6];
+  const WATER_Y = -0.6, LOG_Y = 0.2, BANK_Y = 0.5;
   const rnd = (a, b) => a + Math.random() * (b - a);
   let W = 0, H = 0, dpr = 1;
-  let running = false, t = 0, pen = 0, pos = 0, lane = 1, px = 0, holding = false, walkT = 0;
-  let squirrels = [], spawnCd = 2, attached = null, flash = '', finished = false;
+  let running = false, t = 0, pos = 0, lane = 1, px = 0, holding = false, walkT = 0;
+  let finished = false, flash = '';
   let lastTs = performance.now();
+  // Fixed ripple spots on the water, so the river looks like it is moving as you walk
+  const ripples = Array.from({ length: 36 }, (_, i) => ({ x: ((i * 37) % 53) / 53 * 5.6 - 2.8, z: i * 1.7 }));
 
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -2170,66 +2174,66 @@
     const s = focal() / z;
     return { sx: W / 2 + (x - px) * s, sy: horizon() + (CAM_H - y) * s, s };
   }
-
-  function drawSquirrel(x, y, k, rabid) {
-    ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = '#8a5a2b';
-    ctx.beginPath(); ctx.ellipse(0, -0.45 * k, 0.42 * k, 0.3 * k, 0, 0, Math.PI * 2); ctx.fill();   // body
-    ctx.beginPath(); ctx.ellipse(-0.4 * k, -0.95 * k, 0.5 * k, 0.22 * k, -0.6, 0, Math.PI * 2); ctx.fill(); // tail
-    ctx.beginPath(); ctx.arc(0.36 * k, -0.8 * k, 0.2 * k, 0, Math.PI * 2); ctx.fill();                   // head
-    ctx.fillStyle = '#ff3b3b';
-    ctx.beginPath(); ctx.arc(0.42 * k, -0.84 * k, 0.06 * k, 0, Math.PI * 2); ctx.fill();                  // red eye
-    if (rabid) {
-      ctx.fillStyle = '#ffffff';
-      [[0.5, -0.66], [0.56, -0.7], [0.46, -0.72]].forEach(p => { ctx.beginPath(); ctx.arc(p[0] * k, p[1] * k, 0.05 * k, 0, Math.PI * 2); ctx.fill(); });
-    }
-    ctx.restore();
-  }
-
-  function wall(side) {
-    const pts = [[side * 1.5, 0, 0.4], [side * 9, 34, 0.4], [side * 9, 34, 90], [side * 1.5, 0, 90]];
+  function quad(pts, fill) {
     const p = pts.map(q => proj(q[0], q[1], q[2]));
-    ctx.fillStyle = '#4a4037';
+    ctx.fillStyle = fill;
     ctx.beginPath();
     p.forEach((q, i) => (i ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy)));
     ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#2b241e'; ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  function drawFarBank() {
+    // Trees along the horizon, then the far bank where the river ends
+    const hz = horizon();
+    ctx.fillStyle = '#2d5a3a';
+    ctx.beginPath(); ctx.moveTo(0, hz);
+    for (let x = 0; x <= W + 20; x += 20) ctx.lineTo(x, hz - H * (0.05 + 0.03 * Math.sin(x * 0.05 + 1) + 0.02 * Math.sin(x * 0.13)));
+    ctx.lineTo(W, hz); ctx.closePath(); ctx.fill();
+    const remain = RIVER_LEN - pos;
+    if (remain < 90) quad([[-20, BANK_Y, remain], [20, BANK_Y, remain], [20, BANK_Y, remain + 14], [-20, BANK_Y, remain + 14]], '#4f9a3c');
+    if (remain < 90) quad([[-20, BANK_Y, remain], [20, BANK_Y, remain], [20, WATER_Y, remain], [-20, WATER_Y, remain]], '#6b4a2b');
+  }
+
+  function drawBanksAndWater() {
+    const remain = Math.min(90, RIVER_LEN - pos);
+    // Land on both sides, standing above the water
+    quad([[-20, BANK_Y, 0.2], [-RIVER_HALF, BANK_Y, 0.2], [-RIVER_HALF, BANK_Y, remain], [-20, BANK_Y, remain]], '#4f9a3c');
+    quad([[RIVER_HALF, BANK_Y, 0.2], [20, BANK_Y, 0.2], [20, BANK_Y, remain], [RIVER_HALF, BANK_Y, remain]], '#4f9a3c');
+    // Earth faces of the banks, dropping to the water
+    quad([[-RIVER_HALF, BANK_Y, 0.2], [-RIVER_HALF, WATER_Y, 0.2], [-RIVER_HALF, WATER_Y, remain], [-RIVER_HALF, BANK_Y, remain]], '#6b4a2b');
+    quad([[RIVER_HALF, BANK_Y, 0.2], [RIVER_HALF, WATER_Y, 0.2], [RIVER_HALF, WATER_Y, remain], [RIVER_HALF, BANK_Y, remain]], '#6b4a2b');
+    // Water
+    quad([[-RIVER_HALF, WATER_Y, 0.2], [RIVER_HALF, WATER_Y, 0.2], [RIVER_HALF, WATER_Y, remain], [-RIVER_HALF, WATER_Y, remain]], '#2f7f9c');
+    // Ripples drift backwards past the walker
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineCap = 'round';
+    ripples.forEach(r => {
+      const zr = ((r.z - pos) % 60 + 60) % 60 + 0.4;
+      if (zr > remain - 0.5) return;
+      const p = proj(r.x, WATER_Y, zr);
+      const w = p.s * 0.22;
+      ctx.lineWidth = Math.max(1, p.s * 0.03);
+      ctx.beginPath(); ctx.moveTo(p.sx - w, p.sy); ctx.quadraticCurveTo(p.sx, p.sy - w * 0.25, p.sx + w, p.sy); ctx.stroke();
+    });
   }
 
   function drawLog() {
-    const remain = LOG_LEN - pos;
+    const remain = RIVER_LEN - pos;
     const zFar = Math.min(90, remain);
+    // Shadow of the log on the water
+    quad([[-LOG_HALF - 0.1, WATER_Y + 0.01, 0.4], [LOG_HALF + 0.1, WATER_Y + 0.01, 0.4], [LOG_HALF + 0.1, WATER_Y + 0.01, zFar], [-LOG_HALF - 0.1, WATER_Y + 0.01, zFar]], 'rgba(0,30,40,0.35)');
     let z = 0.4;
     for (let guard = 0; z < zFar && guard < 400; guard++) {
       const z2 = Math.min(zFar, z * 1.06 + 0.05);
       const band = Math.floor((pos + z) * 1.2) % 2;     // bark bands move past as you walk
-      const a = proj(-1.5, 0, z), b = proj(1.5, 0, z), c = proj(1.5, 0, z2), d = proj(-1.5, 0, z2);
-      ctx.fillStyle = band ? '#7a5632' : '#65462a';
-      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.lineTo(c.sx, c.sy); ctx.lineTo(d.sx, d.sy);
-      ctx.closePath(); ctx.fill();
+      quad([[-LOG_HALF, LOG_Y, z], [LOG_HALF, LOG_Y, z], [LOG_HALF, LOG_Y, z2], [-LOG_HALF, LOG_Y, z2]], band ? '#7a5632' : '#65462a');
       z = z2;
     }
-    if (remain > 0.4 && remain < 90) {                  // the far ledge, where the run ends
-      const a = proj(-6, 0, remain), b = proj(6, 0, remain), c = proj(6, 0, remain + 12), d = proj(-6, 0, remain + 12);
-      ctx.fillStyle = '#4f9a3c';
-      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.lineTo(c.sx, c.sy); ctx.lineTo(d.sx, d.sy);
-      ctx.closePath(); ctx.fill();
-    }
-  }
-
-  function drawSquirrels() {
-    squirrels.filter(s => !s.done).sort((a, b) => b.z - a.z).forEach(s => {
-      const z = s.z - pos;
-      if (z < 0.3 || z > 95) return;
-      const p = proj(LANE_X[s.lane], 0, z);
-      drawSquirrel(p.sx, p.sy, p.s * 0.5, true);
-    });
   }
 
   function drawPlayer() {
     const u = Math.min(W, H) * 0.09;
     const cx = W / 2, base = H * 0.9;
-    const step = holding && !attached && running ? Math.sin(walkT * 9) : 0;
+    const step = holding && running ? Math.sin(walkT * 9) : 0;
     ctx.save(); ctx.translate(cx, base);
     ctx.strokeStyle = '#2a3a6a'; ctx.lineWidth = u * 0.28; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -2242,7 +2246,6 @@
     ctx.fillStyle = '#f2c79b'; ctx.beginPath(); ctx.arc(0, -u * 2.3, u * 0.35, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#d8322b'; ctx.beginPath(); ctx.arc(0, -u * 2.3, u * 0.37, Math.PI, 0); ctx.fill();
     ctx.restore();
-    if (attached) drawSquirrel(cx + u * 0.6, base - u * 1.6, u * 0.9, true);   // clinging on
   }
 
   function draw() {
@@ -2250,31 +2253,19 @@
     let g = ctx.createLinearGradient(0, 0, 0, hz);
     g.addColorStop(0, '#5fa8d8'); g.addColorStop(1, '#cfe8f2');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, hz + 1);
-    ctx.fillStyle = '#6d6057';
-    ctx.beginPath(); ctx.moveTo(0, hz); ctx.lineTo(0, hz - H * 0.07); ctx.lineTo(W * 0.3, hz - H * 0.12);
-    ctx.lineTo(W * 0.55, hz - H * 0.05); ctx.lineTo(W * 0.8, hz - H * 0.11); ctx.lineTo(W, hz - H * 0.06); ctx.lineTo(W, hz);
-    ctx.closePath(); ctx.fill();
     g = ctx.createLinearGradient(0, hz, 0, H);
-    g.addColorStop(0, '#1d2c33'); g.addColorStop(1, '#0c1418');
+    g.addColorStop(0, '#3d6b4a'); g.addColorStop(1, '#1d3a28');
     ctx.fillStyle = g; ctx.fillRect(0, hz, W, H - hz);
-    wall(-1); wall(1);
+    drawFarBank();
+    drawBanksAndWater();
     drawLog();
-    drawSquirrels();
     drawPlayer();
-  }
-
-  function bite(s) {
-    s.done = true;
-    attached = { shakes: SHAKES };
-    pen += PENALTY;
-    flash = 'A squirrel bit you! +3 seconds';
   }
 
   function finish() {
     running = false; finished = true; holding = false;
-    const total = t + pen;
-    msgEl.textContent = `You made it! ${total.toFixed(1)} s (${t.toFixed(1)} s running + ${pen} s penalty)`;
-    startEl.textContent = 'Run Again';
+    msgEl.textContent = `Across the river in ${t.toFixed(1)} s!`;
+    startEl.textContent = 'Cross Again';
     startEl.style.display = '';
   }
 
@@ -2282,44 +2273,21 @@
     if (!running) return;
     t += dt;
     px += (LANE_X[lane] - px) * Math.min(1, dt * 10);
-    if (!attached && holding) { pos += SPEED * dt; walkT += dt; }
-    if (pos >= LOG_LEN) { finish(); return; }
-    spawnCd -= dt;
-    if (spawnCd <= 0 && squirrels.length < 2) {
-      squirrels.push({ z: pos + rnd(24, 32), lane: Math.floor(Math.random() * 3), done: false });
-      spawnCd = rnd(3, 5);
-    }
-    squirrels.forEach(s => {
-      if (s.done) return;
-      s.z -= SQ_SPEED * dt;
-      const d = s.z - pos;
-      if (d < 1.2 && d > -1.5) {
-        if (s.lane === lane && !attached) bite(s);       // same lane: it bites
-      } else if (d <= -1.5) {
-        s.done = true;                                     // it ran past you
-      }
-    });
-    squirrels = squirrels.filter(s => !s.done);
+    if (holding) { pos += SPEED * dt; walkT += dt; }
+    if (pos >= RIVER_LEN) finish();
   }
 
   function updateHud() {
     timeEl.textContent = t.toFixed(1);
-    penEl.textContent = pen;
+    penEl.textContent = 0;
     if (finished) return;
-    if (attached) msgEl.textContent = `Tap to shake it off! ${attached.shakes} to go`;
-    else if (flash) msgEl.textContent = flash;
+    if (flash) msgEl.textContent = flash;
     else if (running) msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
   }
 
   sc.addEventListener('pointerdown', e => {
     if (e.target.closest('.sign, button')) return;
     if (!running) return;
-    if (attached) {
-      attached.shakes -= 1;
-      if (attached.shakes <= 0) { attached = null; flash = 'Shaken off!'; }
-      else flash = '';
-      return;
-    }
     holding = true;
     if (e.clientX < W * 0.35 && lane > 0) lane--;
     else if (e.clientX > W * 0.65 && lane < 2) lane++;
@@ -2329,14 +2297,14 @@
   sc.addEventListener('pointercancel', () => { holding = false; });
 
   startEl.addEventListener('click', () => {
-    t = 0; pen = 0; pos = 0; lane = 1; px = 0; walkT = 0;
-    squirrels = []; spawnCd = 2; attached = null; flash = ''; finished = false; holding = false;
+    t = 0; pos = 0; lane = 1; px = 0; walkT = 0;
+    flash = ''; finished = false; holding = false;
     running = true;
     startEl.style.display = 'none';
     msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
   });
 
-  function goCanyon() {
+  function goRiver() {
     if (window.bearStop) window.bearStop();
     if (window.whackStop) window.whackStop();
     scene1El.style.display = 'none';
@@ -2345,15 +2313,15 @@
     sc.style.display = 'block';
     resize();
   }
-  function goCavesFromCanyon() {
-    running = false; holding = false; attached = null;
+  function goCavesFromRiver() {
+    running = false; holding = false;
     sc.style.display = 'none';
     scene2El.style.display = 'block';
     window.scrollTo(0, 0);
     if (window.bearRebuildTufts) window.bearRebuildTufts();
   }
-  document.getElementById('toCanyon').addEventListener('click', goCanyon);
-  document.getElementById('toCavesFromCanyon').addEventListener('click', goCavesFromCanyon);
+  document.getElementById('toCanyon').addEventListener('click', goRiver);
+  document.getElementById('toCavesFromCanyon').addEventListener('click', goCavesFromRiver);
 
   resize();
   function frame(ts) {
