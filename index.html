@@ -188,6 +188,12 @@
             text-shadow:0 2px 0 #7a5a00; pointer-events:none; z-index:6; white-space:nowrap; animation: popUp .75s ease-out forwards; }
   @keyframes popUp { from { opacity:1; margin-top:0; } to { opacity:0; margin-top:-28px; } }
   .s2-counts { width:min(88vw, 320px); }
+  .s2-fall { position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
+  .s2-rock { position:absolute; left:0; top:0; border-radius:45% 55% 50% 50%; background:radial-gradient(circle at 35% 30%, #bcb0a3, #5d5349 70%); box-shadow:0 2px 2px rgba(0,0,0,.4); }
+  .s2-dust { position:absolute; width:110px; height:50px; margin-left:-55px; margin-top:-25px; border-radius:50%; pointer-events:none;
+             background:radial-gradient(ellipse at center, rgba(214,204,188,.9) 0, rgba(170,160,146,.6) 45%, rgba(120,110,100,0) 72%);
+             animation: dustPuff 1.8s ease-out forwards; }
+  @keyframes dustPuff { 0% { transform:scale(.3); opacity:0; } 15% { opacity:1; } 100% { transform:scale(2); opacity:0; } }
   .cricket { position:absolute; width:30px; height:20px; margin-left:-15px; margin-top:-10px; }
   .cricket svg, .s2-ant svg { display:block; width:100%; height:100%; }
   .cricket.flying svg { animation: cflap .07s linear infinite alternate; }
@@ -250,7 +256,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.22</div>
+  <div class="ver-tag">v1.23</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -322,6 +328,7 @@
   </svg>
   <div class="s2-crit" id="s2-crit"></div>
   <div class="s2-tufts" id="s2-tufts"></div>
+  <div class="s2-fall" id="s2-fall"></div>
   <div class="sign" id="toHoles"><i class="post"></i><i class="crack"></i><i class="knot"></i><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px;margin-right:4px"><path d="M12 2 L2 12 M9 12 H2 V5" fill="none" stroke="#2e1a0b" stroke-width="2.4" stroke-linecap="round"/></svg>To Holes</span></div>
   <div class="s2-content">
     <h1>🐻 Whack-a-Bear</h1>
@@ -1965,6 +1972,50 @@
     }
   }
 
+  // ---- Rock falls: during an earthquake and a few seconds after, stones tumble down the cliff and raise dust where they land ----
+  const fallLayer = $('s2-fall');
+  const rocks = [];
+  let rockT = 0, rockCd = 0;
+  function spawnRock() {
+    const { W } = sceneSize();
+    const el = document.createElement('div');
+    el.className = 's2-rock';
+    const size = rnd(8, 24);
+    el.style.width = size.toFixed(1) + 'px';
+    el.style.height = (size * rnd(0.7, 1)).toFixed(1) + 'px';
+    fallLayer.appendChild(el);
+    rocks.push({ el, x: rnd(0, W), y: rnd(-40, -10), vy: rnd(0, 60), spin: rnd(-300, 300), a: 0, size, landY: sceneSize().H - rnd(14, 46) });
+  }
+  function dustAt(x, y) {
+    const d = document.createElement('div');
+    d.className = 's2-dust';
+    d.style.left = x.toFixed(1) + 'px';
+    d.style.top = y.toFixed(1) + 'px';
+    fallLayer.appendChild(d);
+    setTimeout(() => d.remove(), 1900);
+  }
+  function updateRocks(dt) {
+    if (rockT > 0) {
+      rockT -= dt;
+      rockCd -= dt;
+      if (rockCd <= 0) { spawnRock(); rockCd = rnd(0.12, 0.35); }
+    }
+    for (let i = rocks.length - 1; i >= 0; i--) {
+      const r = rocks[i];
+      r.vy += 1100 * dt;
+      r.y += r.vy * dt;
+      r.a += r.spin * dt;
+      if (r.y >= r.landY) {
+        dustAt(r.x, r.landY);
+        tone(110, 45, 0.25, 'triangle', 0.22);
+        r.el.remove();
+        rocks.splice(i, 1);
+      } else {
+        r.el.style.transform = `translate(${(r.x - r.size / 2).toFixed(1)}px, ${r.y.toFixed(1)}px) rotate(${r.a.toFixed(0)}deg)`;
+      }
+    }
+  }
+
   window.bearRebuildTufts = () => buildTufts2();
 
   // ---- Moving between the two scenes ----
@@ -2013,6 +2064,7 @@
           quakeCd -= dt;
           if (quakeCd <= 0) {
             quakeLeft = 3;
+            rockT = 6;   // stones fall during the quake and for about 3 seconds after
             quakeCd = rnd(9, 16);
             scene2.classList.add('s2-quake');
             rumble2();
@@ -2030,6 +2082,7 @@
         if (sec !== lastSec) { lastSec = sec; time2El.textContent = Math.max(0, sec); }
       }
       updateBears(dt);
+      updateRocks(dt);
       if (crittersBuilt) updateCritters(dt);
     }
     requestAnimationFrame(frame2);
