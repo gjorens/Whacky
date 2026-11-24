@@ -276,7 +276,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.32</div>
+  <div class="ver-tag">v1.33</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -2140,24 +2140,29 @@
 </script>
 
 <script>
-// ---- Scene 3: River Crossing. Walk a log across a river, drawn in simple 3D on a canvas ----
+// ---- Scene 3: River Crossing. Walk a log across a river that flows across the view ----
 (function () {
   const sc = document.getElementById('scene3');
   const scene1El = document.getElementById('scene1'), scene2El = document.getElementById('scene2');
   const cv = document.getElementById('canyon-cv'), ctx = cv.getContext('2d');
   const timeEl = document.getElementById('s3-time'), penEl = document.getElementById('s3-pen');
   const msgEl = document.getElementById('s3-msg'), startEl = document.getElementById('s3-start');
-  const RIVER_LEN = 60, CAM_H = 1.6, SPEED = 2.2;
-  const RIVER_HALF = 3;                       // water runs from x=-3 to x=3, banks beyond
+  // World layout along the walk direction (z). Near bank 0..6, river 6..18, far bank from 18.
+  const RIVER_Z0 = 6, RIVER_Z1 = 18, FAR_Z = 70, FINISH = 24, LOG_END = 26;
+  const CAM_H = 1.6, SPEED = 2.2, FLOW = 1.6, NEAR = 0.05;
   const LOG_HALF = 0.9, LANE_X = [-0.6, 0, 0.6];
-  const WATER_Y = -0.6, LOG_Y = 0.2, BANK_Y = 0.5;
-  const rnd = (a, b) => a + Math.random() * (b - a);
+  const WATER_Y = -0.6, LOG_Y = 0.6, BANK_Y = 0.5;
+  const WIDE = 40;                              // scenery runs well past both sides of the view
   let W = 0, H = 0, dpr = 1;
-  let running = false, t = 0, pos = 0, lane = 1, px = 0, holding = false, walkT = 0;
-  let finished = false, flash = '';
+  let running = false, t = 0, pos = 0, lane = 1, px = 0, holding = false, walkT = 0, flowT = 0;
+  let finished = false;
   let lastTs = performance.now();
-  // Fixed ripple spots on the water, so the river looks like it is moving as you walk
-  const ripples = Array.from({ length: 36 }, (_, i) => ({ x: ((i * 37) % 53) / 53 * 5.6 - 2.8, z: i * 1.7 }));
+  // Ripple streaks in the river. They drift leftward across the view, which is the current.
+  const ripples = Array.from({ length: 70 }, (_, i) => ({
+    x: ((i * 37) % 97) / 97 * 40 - 20,
+    z: RIVER_Z0 + 0.6 + ((i * 53) % 71) / 71 * (RIVER_Z1 - RIVER_Z0 - 1.2),
+    len: 0.8 + ((i * 29) % 7) * 0.18
+  }));
 
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -2169,64 +2174,70 @@
 
   const focal = () => W * 0.9;
   const horizon = () => H * 0.42;
-  // Perspective projection: x is sideways (camera follows the walker), y is height, z is distance ahead
-  function proj(x, y, z) {
-    const s = focal() / z;
+  // Perspective projection. x is sideways (camera follows the walker), y is height, z is distance ahead of the camera.
+  function proj(x, y, zr) {
+    const s = focal() / zr;
     return { sx: W / 2 + (x - px) * s, sy: horizon() + (CAM_H - y) * s, s };
   }
+  // Clip a world-space polygon to the near plane, then draw it
   function quad(pts, fill) {
-    const p = pts.map(q => proj(q[0], q[1], q[2]));
+    const rel = pts.map(q => [q[0], q[1], q[2] - pos]);
+    const out = [];
+    for (let i = 0; i < rel.length; i++) {
+      const a = rel[i], b = rel[(i + 1) % rel.length];
+      const ai = a[2] >= NEAR, bi = b[2] >= NEAR;
+      if (ai) out.push(a);
+      if (ai !== bi) {
+        const k = (NEAR - a[2]) / (b[2] - a[2]);
+        out.push([a[0] + k * (b[0] - a[0]), a[1] + k * (b[1] - a[1]), NEAR]);
+      }
+    }
+    if (out.length < 3) return;
     ctx.fillStyle = fill;
     ctx.beginPath();
-    p.forEach((q, i) => (i ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy)));
+    out.forEach((q, i) => { const p = proj(q[0], q[1], q[2]); if (i) ctx.lineTo(p.sx, p.sy); else ctx.moveTo(p.sx, p.sy); });
     ctx.closePath(); ctx.fill();
   }
 
-  function drawFarBank() {
-    // Trees along the horizon, then the far bank where the river ends
+  function drawTreeBand() {
     const hz = horizon();
     ctx.fillStyle = '#2d5a3a';
     ctx.beginPath(); ctx.moveTo(0, hz);
     for (let x = 0; x <= W + 20; x += 20) ctx.lineTo(x, hz - H * (0.05 + 0.03 * Math.sin(x * 0.05 + 1) + 0.02 * Math.sin(x * 0.13)));
     ctx.lineTo(W, hz); ctx.closePath(); ctx.fill();
-    const remain = RIVER_LEN - pos;
-    if (remain < 90) quad([[-20, BANK_Y, remain], [20, BANK_Y, remain], [20, BANK_Y, remain + 14], [-20, BANK_Y, remain + 14]], '#4f9a3c');
-    if (remain < 90) quad([[-20, BANK_Y, remain], [20, BANK_Y, remain], [20, WATER_Y, remain], [-20, WATER_Y, remain]], '#6b4a2b');
   }
 
-  function drawBanksAndWater() {
-    const remain = Math.min(90, RIVER_LEN - pos);
-    // Land on both sides, standing above the water
-    quad([[-20, BANK_Y, 0.2], [-RIVER_HALF, BANK_Y, 0.2], [-RIVER_HALF, BANK_Y, remain], [-20, BANK_Y, remain]], '#4f9a3c');
-    quad([[RIVER_HALF, BANK_Y, 0.2], [20, BANK_Y, 0.2], [20, BANK_Y, remain], [RIVER_HALF, BANK_Y, remain]], '#4f9a3c');
-    // Earth faces of the banks, dropping to the water
-    quad([[-RIVER_HALF, BANK_Y, 0.2], [-RIVER_HALF, WATER_Y, 0.2], [-RIVER_HALF, WATER_Y, remain], [-RIVER_HALF, BANK_Y, remain]], '#6b4a2b');
-    quad([[RIVER_HALF, BANK_Y, 0.2], [RIVER_HALF, WATER_Y, 0.2], [RIVER_HALF, WATER_Y, remain], [RIVER_HALF, BANK_Y, remain]], '#6b4a2b');
-    // Water
-    quad([[-RIVER_HALF, WATER_Y, 0.2], [RIVER_HALF, WATER_Y, 0.2], [RIVER_HALF, WATER_Y, remain], [-RIVER_HALF, WATER_Y, remain]], '#2f7f9c');
-    // Ripples drift backwards past the walker
+  function drawWorld() {
+    // Far bank land, then the river, then the far bank's drop to the water
+    quad([[-WIDE, BANK_Y, RIVER_Z1], [WIDE, BANK_Y, RIVER_Z1], [WIDE, BANK_Y, FAR_Z], [-WIDE, BANK_Y, FAR_Z]], '#4f9a3c');
+    quad([[-WIDE, WATER_Y, RIVER_Z0], [WIDE, WATER_Y, RIVER_Z0], [WIDE, WATER_Y, RIVER_Z1], [-WIDE, WATER_Y, RIVER_Z1]], '#2f7f9c');
+    quad([[-WIDE, BANK_Y, RIVER_Z1], [WIDE, BANK_Y, RIVER_Z1], [WIDE, WATER_Y, RIVER_Z1], [-WIDE, WATER_Y, RIVER_Z1]], '#6b4a2b');
+    // Current streaks, drifting right to left
     ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineCap = 'round';
     ripples.forEach(r => {
-      const zr = ((r.z - pos) % 60 + 60) % 60 + 0.4;
-      if (zr > remain - 0.5) return;
-      const p = proj(r.x, WATER_Y, zr);
-      const w = p.s * 0.22;
-      ctx.lineWidth = Math.max(1, p.s * 0.03);
-      ctx.beginPath(); ctx.moveTo(p.sx - w, p.sy); ctx.quadraticCurveTo(p.sx, p.sy - w * 0.25, p.sx + w, p.sy); ctx.stroke();
+      const wx = ((r.x - flowT * FLOW + 20) % 40 + 40) % 40 - 20;
+      const zr = r.z - pos;
+      if (zr < NEAR + 0.3) return;
+      const p1 = proj(wx, WATER_Y, zr), p2 = proj(wx + r.len, WATER_Y, zr);
+      ctx.lineWidth = Math.max(1, p1.s * 0.03);
+      ctx.beginPath(); ctx.moveTo(p1.sx, p1.sy); ctx.lineTo(p2.sx, p2.sy); ctx.stroke();
     });
+    // Near bank: the walker's side of the river
+    quad([[-WIDE, BANK_Y, 0], [WIDE, BANK_Y, 0], [WIDE, BANK_Y, RIVER_Z0], [-WIDE, BANK_Y, RIVER_Z0]], '#4f9a3c');
   }
 
   function drawLog() {
-    const remain = RIVER_LEN - pos;
-    const zFar = Math.min(90, remain);
-    // Shadow of the log on the water
-    quad([[-LOG_HALF - 0.1, WATER_Y + 0.01, 0.4], [LOG_HALF + 0.1, WATER_Y + 0.01, 0.4], [LOG_HALF + 0.1, WATER_Y + 0.01, zFar], [-LOG_HALF - 0.1, WATER_Y + 0.01, zFar]], 'rgba(0,30,40,0.35)');
-    let z = 0.4;
-    for (let guard = 0; z < zFar && guard < 400; guard++) {
-      const z2 = Math.min(zFar, z * 1.06 + 0.05);
-      const band = Math.floor((pos + z) * 1.2) % 2;     // bark bands move past as you walk
-      quad([[-LOG_HALF, LOG_Y, z], [LOG_HALF, LOG_Y, z], [LOG_HALF, LOG_Y, z2], [-LOG_HALF, LOG_Y, z2]], band ? '#7a5632' : '#65462a');
-      z = z2;
+    // Shadow on the water
+    quad([[-LOG_HALF - 0.1, WATER_Y + 0.01, RIVER_Z0], [LOG_HALF + 0.1, WATER_Y + 0.01, RIVER_Z0],
+          [LOG_HALF + 0.1, WATER_Y + 0.01, RIVER_Z1], [-LOG_HALF - 0.1, WATER_Y + 0.01, RIVER_Z1]], 'rgba(0,30,40,0.35)');
+    // The log, from the near bank (world z 0) to past the far bank
+    let zw = Math.max(0, pos + NEAR);
+    for (let guard = 0; zw < LOG_END && guard < 400; guard++) {
+      const step = Math.max(0.25, (zw - pos) * 0.06 + 0.05);
+      const z2 = Math.min(LOG_END, zw + step);
+      const band = Math.floor(((zw + z2) / 2) * 1.2) % 2;   // bark bands slide past as you walk
+      quad([[-LOG_HALF, LOG_Y, zw], [LOG_HALF, LOG_Y, zw], [LOG_HALF, LOG_Y, z2], [-LOG_HALF, LOG_Y, z2]], band ? '#7a5632' : '#65462a');
+      zw = z2;
     }
   }
 
@@ -2256,8 +2267,8 @@
     g = ctx.createLinearGradient(0, hz, 0, H);
     g.addColorStop(0, '#3d6b4a'); g.addColorStop(1, '#1d3a28');
     ctx.fillStyle = g; ctx.fillRect(0, hz, W, H - hz);
-    drawFarBank();
-    drawBanksAndWater();
+    drawTreeBand();
+    drawWorld();
     drawLog();
     drawPlayer();
   }
@@ -2274,15 +2285,14 @@
     t += dt;
     px += (LANE_X[lane] - px) * Math.min(1, dt * 10);
     if (holding) { pos += SPEED * dt; walkT += dt; }
-    if (pos >= RIVER_LEN) finish();
+    if (pos >= FINISH) finish();
   }
 
   function updateHud() {
     timeEl.textContent = t.toFixed(1);
     penEl.textContent = 0;
     if (finished) return;
-    if (flash) msgEl.textContent = flash;
-    else if (running) msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
+    if (running) msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
   }
 
   sc.addEventListener('pointerdown', e => {
@@ -2291,14 +2301,13 @@
     holding = true;
     if (e.clientX < W * 0.35 && lane > 0) lane--;
     else if (e.clientX > W * 0.65 && lane < 2) lane++;
-    flash = '';
   });
   sc.addEventListener('pointerup', () => { holding = false; });
   sc.addEventListener('pointercancel', () => { holding = false; });
 
   startEl.addEventListener('click', () => {
     t = 0; pos = 0; lane = 1; px = 0; walkT = 0;
-    flash = ''; finished = false; holding = false;
+    finished = false; holding = false;
     running = true;
     startEl.style.display = 'none';
     msgEl.textContent = 'Hold to walk. Tap the left or right side to step.';
@@ -2327,6 +2336,7 @@
   function frame(ts) {
     const dt = Math.min(0.05, (ts - lastTs) / 1000);
     lastTs = ts;
+    flowT += dt;
     if (sc.style.display !== 'none') {
       update(dt);
       draw();
