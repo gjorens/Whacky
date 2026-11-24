@@ -55,11 +55,12 @@
   #bugs { position:fixed; inset:0; z-index:2; overflow:hidden; pointer-events:none; }
   .bug { position:absolute; width:26px; height:26px; }
   .bug svg { display:block; width:100%; height:100%; overflow:visible; }
-  .bug .wing { display:none; transform-box:fill-box; transform-origin:center; }
-  .bug.flying .wing { display:inline; animation: flap .08s linear infinite alternate; }
+  /* Wings pivot at the body; when flying they open wide and beat up and down */
+  .bug .wing { display:none; transform-box:view-box; transform-origin:23px 20px; }
+  .bug.flying .wing { display:inline; animation: flapWide .1s ease-in-out infinite alternate; }
+  @keyframes flapWide { from { transform:scaleY(1.1); } to { transform:scaleY(1.9); } }
   .bug.flying svg { filter: drop-shadow(6px 9px 3px rgba(0,0,0,.35)); }
   .bug.walking svg { animation: waddle .35s ease-in-out infinite alternate; }
-  @keyframes flap { from { transform:scaleY(1); } to { transform:scaleY(.35); } }
   @keyframes waddle { from { transform:translateY(-1px); } to { transform:translateY(1px); } }
   .ant { position:absolute; width:14px; height:10px; }
   .tuft { position:absolute; width:34px; height:26px; }
@@ -414,6 +415,9 @@
     } else if (state === 'fly') {
       b.speed = rand(180, 260);
       b.tx = rand(0, W); b.ty = rand(0, H);
+      // Flight heading wanders: it turns in random bursts while easing toward the target
+      b.heading = Math.atan2(b.ty - b.y, b.tx - b.x) * 180 / Math.PI;
+      b.turnRate = 0; b.turnTimer = 0;
     } else {
       b.speed = 0;
       b.timer = rand(2, 4);                  // seconds resting
@@ -450,7 +454,7 @@
         } else if (dist < 6) {
           setBugState(b, 'rest');                // landed
         } else {
-          moveBug(b, dx, dy, dist, dt);
+          flyBug(b, dx, dy, dist, dt);
         }
       }
       b.el.style.left = b.x + 'px';
@@ -459,6 +463,22 @@
       b.el.style.transform = `translate(-50%,-50%) rotate(${b.angle + 180}deg)`;
     });
     requestAnimationFrame(bugLoop);
+  }
+
+  // Flying: a random turn every few tenths of a second, pulled back toward the target
+  function flyBug(b, dx, dy, dist, dt) {
+    b.turnTimer -= dt;
+    if (b.turnTimer <= 0) {
+      b.turnRate = rand(-260, 260);           // degrees per second
+      b.turnTimer = rand(0.15, 0.5);
+    }
+    const target = Math.atan2(dy, dx) * 180 / Math.PI;
+    const diff = ((target - b.heading + 540) % 360) - 180;
+    b.heading += b.turnRate * dt + diff * Math.min(1, dt * 1.2);
+    const rad = b.heading * Math.PI / 180;
+    b.x += Math.cos(rad) * b.speed * dt;
+    b.y += Math.sin(rad) * b.speed * dt;
+    b.angle = b.heading;
   }
 
   function moveBug(b, dx, dy, dist, dt) {
