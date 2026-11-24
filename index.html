@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.12</div>
+  <div class="ver-tag">v1.13</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -406,6 +406,7 @@
     ).join('') +
     `<circle cx="64" cy="7" r="5" fill="#8a5630" stroke="#3d2411" stroke-width=".8"/></svg>`;
   // Three worms slither under the grass. Now and then one burrows out of sight and comes up a short way off
+  const WORM_MAX = 8;                 // ants on a worm before it burrows
   const worms = [];
   for (let i = 0; i < 3; i++) {
     const el = document.createElement('div');
@@ -416,6 +417,7 @@
       el, x: rand(0, window.innerWidth), y: rand(0, window.innerHeight),
       heading: rand(0, Math.PI * 2), turn: 0, phase: rand(0, 10),
       burrowIn: rand(8, 16),           // seconds until it next burrows
+      isWorm: true, riders: 0,
       mode: 'out',                     // out | entering | under | emerging
       d: 0, e: 0,                      // distance travelled while entering / emerging (0 to 70 px)
       cx0: 0, cy0: 0, ex: 0, ey: 0,    // start centre and hole position for the current burrow
@@ -441,6 +443,32 @@
     w.el.style.clipPath = `inset(0 ${w.clipR}px 0 ${w.clipL}px)`;
   }
   // Wanders gently with a slithering sway; turns back toward the middle near the edges
+  // Going underground: most ants on the worm drop off, but one or two ride down the hole with it
+  function startWormBurrow(w, dx, dy) {
+    w.mode = 'entering';
+    w.cx0 = w.x; w.cy0 = w.y; w.d = 0;
+    makeWormHole(w.x + dx * 35, w.y + dy * 35);   // the head is at the hole's edge
+    const tunnel = Math.min(w.riders, Math.random() < 0.5 ? 1 : 2);
+    releaseRiders(w, false, tunnel);              // the others drop off
+    ants.forEach(a => {
+      if (a.cluster && a.cluster.bug === w) {
+        a.tunnel = true;                          // travelling underground: hidden
+        a.el.style.opacity = '0';
+      }
+    });
+  }
+  // Coming up: the tunnel ants reappear at the new hole and rest for ten seconds
+  function surfaceTunnelAnts(w) {
+    const now = performance.now();
+    ants.forEach(a => {
+      if (!a.tunnel || !a.cluster || a.cluster.bug !== w) return;
+      a.cluster = null;
+      a.tunnel = false;
+      a.x = w.ex; a.y = w.ey;
+      a.el.style.opacity = '1';
+      a.restUntil = now + 10000;
+    });
+  }
   function moveWorm(w, dt) {
     const W = window.innerWidth, H = window.innerHeight;
     w.phase += dt;
@@ -473,6 +501,7 @@
         w.e = 0;
         makeWormHole(w.ex, w.ey);        // the way out
         w.mode = 'emerging';
+        surfaceTunnelAnts(w);
       }
       placeWorm(w);
       return;
@@ -495,10 +524,8 @@
     }
     // Above ground: crawl and sway
     w.burrowIn -= dt;
-    if (w.burrowIn <= 0) {
-      w.mode = 'entering';
-      w.cx0 = w.x; w.cy0 = w.y; w.d = 0;
-      makeWormHole(w.x + dx * 35, w.y + dy * 35);   // the head is at the hole's edge
+    if (w.burrowIn <= 0 || w.riders >= WORM_MAX) {
+      startWormBurrow(w, dx, dy);
       placeWorm(w);
       return;
     }
@@ -539,6 +566,17 @@
         a.scaredUntil = 0;
         a.tx = rand(0, W); a.ty = rand(0, H);   // stop fleeing: wander off from here
         a.huntTimer = 0;                 // and resume hunting right away
+      }
+      if (a.restUntil) {
+        if (ts < a.restUntil) {
+          // Resting just out of the hole
+          a.el.style.left = a.x + 'px';
+          a.el.style.top = a.y + 'px';
+          a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
+          return;
+        }
+        a.restUntil = 0;
+        a.huntTimer = 0;                 // rested: back to hunting
       }
       if (a.cluster) {
         // Attached ants hold on to their ladybug and move with it
@@ -710,14 +748,16 @@
   // ---- Ants hopping onto ladybugs ----
   // A ladybug takes up to ten riders. Each rider slows it down. At ten it flies away and the riders drop off.
   function canTakeRider(b) {
+    if (b.isWorm) return b.mode === 'out' && b.riders < WORM_MAX;
     return (b.state === 'walk' || b.state === 'rest') && b.riders < 10;
   }
   function nearestBug(a) {
-    let best = null, bestD = 300;
-    bugs.forEach(b => {
+    let best = null, bestD = Infinity;
+    bugs.concat(worms).forEach(b => {
       if (!canTakeRider(b)) return;
       const d = Math.hypot(b.x - a.x, b.y - a.y);
-      if (d < bestD) { bestD = d; best = b; }
+      const range = b.isWorm ? 150 : 300;      // ants notice worms from a shorter distance
+      if (d < range && d < bestD) { bestD = d; best = b; }
     });
     return best;
   }
@@ -726,7 +766,7 @@
     a.seek = null;
     a.cluster = { bug: b, ox: Math.cos(ang) * r, oy: Math.sin(ang) * r };
     b.riders++;
-    bugsLayer.appendChild(a.el);       // draw riding ants on top of the ladybug
+    (b.isWorm ? antsLayer : bugsLayer).appendChild(a.el);   // riding ants sit on top of their ladybug or worm
   }
   // Detaches riders from a ladybug. The first `keep` riders stay on (used when it takes off)
   function releaseRiders(b, scare, keep = 0) {
