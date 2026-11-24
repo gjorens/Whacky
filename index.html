@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.19</div>
+  <div class="ver-tag">v1.20</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -878,7 +878,7 @@
   bugsLayer.appendChild(boyEl);      // above the grass so he is always visible
   const boy = {
     el: boyEl, x: window.innerWidth / 2, y: window.innerHeight / 2,
-    tx: 0, ty: 0, dir: 1, state: 'wander', timer: 0, clear: 0
+    tx: 0, ty: 0, dir: 1, state: 'wander', timer: 0, clear: 0, hidden: 0
   };
   // True if a point is on or right next to one of the holes
   function holeRectAt(x, y) {
@@ -925,12 +925,25 @@
       }
     }
     if (boy.state === 'hide') {
-      // Crouched in the grass, under the tufts. Comes back up after 3 seconds with no ladybugs nearby
+      // Crouched in the grass. Comes back up once no ladybugs are nearby, or after 15 seconds at most
       boy.clear = near.d < 150 ? 0 : boy.clear + dt;
-      if (boy.clear > 3) {
+      boy.hidden += dt;
+      if (boy.clear > 3 || boy.hidden >= 15) {
+        // Pop up somewhere else, as far from the nearest ladybug as he can get
+        let best = null, bestD = -1;
+        for (let i = 0; i < 12; i++) {
+          const ang = rand(0, Math.PI * 2), r = rand(60, 120);
+          const x = Math.min(W - 40, Math.max(40, boy.x + Math.cos(ang) * r));
+          const y = Math.min(H - 40, Math.max(80, boy.y + Math.sin(ang) * r));
+          if (holeAt(x, y)) continue;
+          const d = Math.hypot(x - near.x, y - near.y);
+          if (d > bestD) { bestD = d; best = { x, y }; }
+        }
+        if (best) { boy.x = best.x; boy.y = best.y; }
         boy.el.classList.remove('crouch');
         bugsLayer.appendChild(boy.el);
         boy.state = 'wander';
+        boy.hidden = 0;
         pickBoyTarget();
       }
       placeBoy();
@@ -955,6 +968,7 @@
           // Still chased: dive into the grass and hide
           boy.state = 'hide';
           boy.clear = 0;
+          boy.hidden = 0;
           boy.el.classList.remove('running');
           boy.el.classList.add('crouch');
           antsLayer.appendChild(boy.el);
