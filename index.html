@@ -61,6 +61,13 @@
   .bug svg { display:block; width:100%; height:100%; overflow:visible; }
   /* Wings pivot at the body; when flying they open wide and beat up and down */
   .bug .wing { display:none; transform-box:view-box; transform-origin:23px 20px; }
+  /* The shell splits along the body into a top and a bottom half. They lift away from the body when flying or fluttering, and close slowly after landing */
+  .bug .shell-t, .bug .shell-b { transform-box:view-box; transform-origin:23px 20px; transition: transform 1s ease-in-out 1s; }
+  .bug.flying .shell-t, .bug.flutter .shell-t { transform: translateY(-6px) scaleY(1.1); transition: transform .35s ease-out; }
+  .bug.flying .shell-b, .bug.flutter .shell-b { transform: translateY(6px) scaleY(1.1); transition: transform .35s ease-out; }
+  /* After landing: the wings fold up first, then the shell closes */
+  .bug.folding .wing { display:inline; animation: foldWing 1s ease-in forwards; }
+  @keyframes foldWing { from { transform:scaleY(1); } to { transform:scaleY(.05); } }
   .bug.flying .wing, .bug.flutter .wing { display:inline; animation: flapWide .1s ease-in-out infinite alternate; }
   @keyframes flapWide { from { transform:scaleY(1.1); } to { transform:scaleY(1.9); } }
   .bug.flying svg { filter: drop-shadow(6px 9px 3px rgba(0,0,0,.35)); }
@@ -260,7 +267,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.26</div>
+  <div class="ver-tag">v1.27</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -733,19 +740,24 @@
   // ---- Ladybugs: each one walks, then flies somewhere, then rests ----
   const bugsLayer = document.getElementById('bugs');
   const BUG_SVG = `<svg viewBox="0 0 40 40">
-      <ellipse cx="23" cy="20" rx="16" ry="14" fill="#d8322b"/>
-      <path d="M23 6.5 V33.5" stroke="#1b1410" stroke-width="1.2"/>
-      <g fill="#1b1410">
-        <circle cx="16" cy="13" r="2.8"/><circle cx="29" cy="12" r="2.8"/>
-        <circle cx="15" cy="25" r="2.8"/><circle cx="30" cy="27" r="2.8"/><circle cx="23" cy="20" r="2.4"/>
-      </g>
+      <ellipse class="wing" cx="22" cy="20" rx="15" ry="7" fill="#141012" opacity=".92"/>
+      <ellipse cx="23" cy="20" rx="12" ry="11" fill="#1b1410"/>
+      <g class="shell-t"><path d="M7 20 A16 14 0 0 1 39 20 Z" fill="#d8322b"/><circle cx="16" cy="13" r="2.8" fill="#1b1410"/><circle cx="29" cy="12" r="2.8" fill="#1b1410"/></g>
+      <g class="shell-b"><path d="M7 20 A16 14 0 0 0 39 20 Z" fill="#d8322b"/><circle cx="15" cy="25" r="2.8" fill="#1b1410"/><circle cx="30" cy="27" r="2.8" fill="#1b1410"/></g>
+      <path d="M7 20 H39" stroke="#1b1410" stroke-width="1.2"/>
       <circle cx="6" cy="20" r="4.5" fill="#1b1410"/>
-      <ellipse class="wing" cx="23" cy="12" rx="13" ry="5" fill="#e6f3ff" opacity=".6"/>
-      <ellipse class="wing" cx="23" cy="28" rx="13" ry="5" fill="#e6f3ff" opacity=".6"/>
     </svg>`;
 
   function setBugState(b, state) {
     const W = window.innerWidth, H = window.innerHeight;
+    const airborne = state === 'fly' || state === 'exit';
+    if (!airborne && (b.state === 'fly' || b.state === 'exit')) {
+      // Just landed: fold the wings for a second, then the shell closes
+      b.el.classList.add('folding');
+      clearTimeout(b.foldTimer);
+      b.foldTimer = setTimeout(() => b.el.classList.remove('folding'), 2000);
+    }
+    if (airborne) { clearTimeout(b.foldTimer); b.el.classList.remove('folding'); }
     b.state = state;
     b.el.classList.toggle('walking', state === 'walk');
     b.el.classList.toggle('flying', state === 'fly' || state === 'exit');
