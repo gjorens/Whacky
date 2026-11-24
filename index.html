@@ -194,7 +194,8 @@
              background:radial-gradient(ellipse at center, rgba(214,204,188,.9) 0, rgba(170,160,146,.6) 45%, rgba(120,110,100,0) 72%);
              animation: dustPuff 1.8s ease-out forwards; }
   @keyframes dustPuff { 0% { transform:scale(.3); opacity:0; } 15% { opacity:1; } 100% { transform:scale(2); opacity:0; } }
-  .cricket { position:absolute; width:30px; height:20px; margin-left:-15px; margin-top:-10px; }
+  .ant, .bug, .worm, .boy, .s2-ant, .cricket { left:0; top:0; }
+  .cricket { position:absolute; width:30px; height:20px; }
   .cricket svg, .s2-ant svg { display:block; width:100%; height:100%; }
   .cricket.flying svg { animation: cflap .07s linear infinite alternate; }
   @keyframes cflap { from { transform:scaleY(1); } to { transform:scaleY(.55); } }
@@ -217,7 +218,9 @@
   .sign .post { position:absolute; left:50%; top:100%; width:18px; height:70px; margin-left:-9px; z-index:-1; border-radius:9px 9px 4px 4px;
           transform:rotate(10deg); background:linear-gradient(90deg, #4f3016, #8a5c2f 45%, #4a2c14); }
   .sign .post::after { content:""; position:absolute; left:4px; top:40%; width:10px; height:12px; border-radius:50%; background:#3b2310; }
-  #toCaves { top:4px; right:4px; transform:rotate(-5deg); font-size:.8rem; padding:6px 10px; }
+  #scene1 h1 { font-size:1.4rem; }
+  #toCaves { top:-2px; right:2px; transform:rotate(-5deg); font-size:.7rem; padding:4px 8px; }
+  #toCaves .post { height:34px; }
   #toHoles { left:8px; bottom:90px; transform:rotate(4deg); }
 </style>
 </head>
@@ -256,7 +259,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.23</div>
+  <div class="ver-tag">v1.24</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -548,9 +551,7 @@
     setTimeout(() => h.remove(), 22000);
   }
   function placeWorm(w) {
-    w.el.style.left = w.x + 'px';
-    w.el.style.top = w.y + 'px';
-    w.el.style.transform = `translate(-50%,-50%) rotate(${w.angle}deg)`;
+    w.el.style.transform = `translate(${w.x}px,${w.y}px) translate(-50%,-50%) rotate(${w.angle}deg)`;
     w.el.style.clipPath = `inset(0 ${w.clipR}px 0 ${w.clipL}px)`;
   }
   // Wanders gently with a slithering sway; turns back toward the middle near the edges
@@ -657,8 +658,10 @@
     placeWorm(w);
   }
 
+  const scene1Hidden = () => document.getElementById('scene1').style.display === 'none';
   let lastTs = performance.now();
   function antLoop(ts) {
+    if (scene1Hidden()) { lastTs = ts; requestAnimationFrame(antLoop); return; }
     const dt = Math.min(0.05, (ts - lastTs) / 1000);
     lastTs = ts;
     const W = window.innerWidth, H = window.innerHeight;
@@ -669,9 +672,7 @@
           if (Math.hypot(a.tx - a.x, a.ty - a.y) < 4) fleeTarget(a);
           moveAnt(a, a.tx, a.ty, 130, dt);
           // Draw the new position now; the early return would otherwise skip the screen update
-          a.el.style.left = a.x + 'px';
-          a.el.style.top = a.y + 'px';
-          a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
+          a.el.style.transform = `translate(${a.x}px,${a.y}px) translate(-50%,-50%) rotate(${a.angle}deg)`;
           return;
         }
         a.scaredUntil = 0;
@@ -681,9 +682,7 @@
       if (a.restUntil) {
         if (ts < a.restUntil) {
           // Resting just out of the hole
-          a.el.style.left = a.x + 'px';
-          a.el.style.top = a.y + 'px';
-          a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
+          a.el.style.transform = `translate(${a.x}px,${a.y}px) translate(-50%,-50%) rotate(${a.angle}deg)`;
           return;
         }
         a.restUntil = 0;
@@ -717,9 +716,7 @@
           moveAnt(a, a.tx, a.ty, a.speed, dt);
         }
       }
-      a.el.style.left = a.x + 'px';
-      a.el.style.top = a.y + 'px';
-      a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
+      a.el.style.transform = `translate(${a.x}px,${a.y}px) translate(-50%,-50%) rotate(${a.angle}deg)`;
     });
     worms.forEach(w => moveWorm(w, dt));
     requestAnimationFrame(antLoop);
@@ -780,6 +777,7 @@
 
   let bugTs = performance.now();
   function bugLoop(ts) {
+    if (scene1Hidden()) { bugTs = ts; requestAnimationFrame(bugLoop); return; }
     const dt = Math.min(0.05, (ts - bugTs) / 1000);
     bugTs = ts;
     const W = window.innerWidth, H = window.innerHeight;
@@ -837,10 +835,8 @@
           else flyBug(b, dx, dy, dist, dt);
         }
       }
-      b.el.style.left = b.x + 'px';
-      b.el.style.top = b.y + 'px';
       // The head is on the left of the sprite, so add 180 degrees to face the direction of travel
-      b.el.style.transform = `translate(-50%,-50%) rotate(${b.angle + 180}deg)`;
+      b.el.style.transform = `translate(${b.x}px,${b.y}px) translate(-50%,-50%) rotate(${b.angle + 180}deg)`;
     });
     requestAnimationFrame(bugLoop);
   }
@@ -1017,9 +1013,7 @@
     return best;
   }
   function placeBoy() {
-    boy.el.style.left = boy.x + 'px';
-    boy.el.style.top = boy.y + 'px';
-    boy.el.style.transform = `translate(-50%,-100%) scaleX(${boy.dir})`;
+    boy.el.style.transform = `translate(${boy.x}px,${boy.y}px) translate(-50%,-100%) scaleX(${boy.dir})`;
   }
   function moveBoy(dt) {
     const W = window.innerWidth, H = window.innerHeight;
@@ -1111,6 +1105,7 @@
   }
   let boyTs = performance.now();
   function boyLoop(ts) {
+    if (scene1Hidden()) { boyTs = ts; requestAnimationFrame(boyLoop); return; }
     const dt = Math.min(0.05, (ts - boyTs) / 1000);
     boyTs = ts;
     moveBoy(dt);
@@ -1901,8 +1896,7 @@
         c.chirpT -= dt;
         if (c.chirpT <= 0) { chirp(); c.chirpT = rnd(0.5, 1.2); }
       }
-      c.el.style.left = c.x + 'px';
-      c.el.style.top = c.y + 'px';
+      c.el.style.transform = `translate(${c.x}px,${c.y}px) translate(-50%,-50%)`;
     });
     ants2.forEach(a => {
       // Chase the nearest cricket that is sitting still
@@ -1934,9 +1928,7 @@
         a.y += dy / d * s;
         a.angle = Math.atan2(dy, dx) * 180 / Math.PI;
       }
-      a.el.style.left = a.x + 'px';
-      a.el.style.top = a.y + 'px';
-      a.el.style.transform = `translate(-50%,-50%) rotate(${a.angle}deg)`;
+      a.el.style.transform = `translate(${a.x}px,${a.y}px) translate(-50%,-50%) rotate(${a.angle}deg)`;
     });
   }
 
@@ -2037,6 +2029,11 @@
     window.scrollTo(0, 0);
     if (window.rebuildTufts) window.rebuildTufts();
   }
+  let lastEnd2 = 0;
+  scene2.addEventListener('touchend', e => {
+    if (e.timeStamp - lastEnd2 < 350) e.preventDefault();   // a quick second tap should not zoom the page
+    lastEnd2 = e.timeStamp;
+  }, { passive: false });
   $('toCaves').addEventListener('click', goCaves);
   $('toHoles').addEventListener('click', goHoles);
   let rzT = null;
