@@ -163,6 +163,7 @@
       h.mole.classList.add('whacked');
       setScore(score + 1);
       floatText(h.hole, '+1');
+      playHitSound();
       streak++;
       if (streak >= STREAK_BONUS_AT) {
         setScore(score + STREAK_BONUS_POINTS);
@@ -174,6 +175,7 @@
     } else {
       setScore(score - 1);
       streak = 0;
+      playMissSound();
       h.hole.classList.remove('miss');
       void h.hole.offsetWidth;
       h.hole.classList.add('miss');
@@ -234,6 +236,53 @@
         osc.stop(t0 + start + dur + 0.05);
       });
     } catch (e) { /* audio unavailable; the game still works */ }
+  }
+
+  // Shared audio helper: returns a ready AudioContext, or null if unavailable
+  function getAudio() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      audioCtx = audioCtx || new Ctx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    } catch (e) { return null; }
+  }
+
+  // Bright two-note "ding" on a successful whack
+  function playHitSound() {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    [[880, 0.00], [1320, 0.07]].forEach(([freq, start]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t0 + start);
+      gain.gain.setValueAtTime(0.0001, t0 + start);
+      gain.gain.exponentialRampToValueAtTime(0.3, t0 + start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + start + 0.15);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0 + start);
+      osc.stop(t0 + start + 0.16);
+    });
+  }
+
+  // Short low, buzzy "bonk" on a miss
+  function playMissSound() {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(180, t0);
+    osc.frequency.exponentialRampToValueAtTime(70, t0 + 0.22);
+    gain.gain.setValueAtTime(0.18, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.25);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.26);
   }
 
   function showBanner() {
