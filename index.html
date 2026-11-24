@@ -95,6 +95,22 @@
   .worm-hole { position:absolute; width:14px; height:9px; border-radius:50%; pointer-events:none;
                background: radial-gradient(ellipse at center, #1a0f07 45%, #4a2e14 75%, transparent 100%);
                transition: opacity 2s ease; }
+  /* The little boy: about twice a grass tuft tall. Runs from ladybugs, then crouches in the grass to hide */
+  .boy { position:absolute; width:26px; height:52px; pointer-events:none; }
+  .boy svg { width:100%; height:100%; overflow:visible; display:block; }
+  .boy .leg-l, .boy .leg-r, .boy .arm-l, .boy .arm-r, .boy .hair { transform-box:view-box; }
+  .boy .leg-l { transform-origin:16px 50px; }
+  .boy .leg-r { transform-origin:24px 50px; }
+  .boy .arm-l { transform-origin:9px 29px; }
+  .boy .arm-r { transform-origin:31px 29px; }
+  .boy .hair { transform-origin:20px 14px; animation: hairSway 1.8s ease-in-out infinite alternate; }
+  .boy.running .leg-l, .boy.running .arm-r { animation: limbA .22s ease-in-out infinite alternate; }
+  .boy.running .leg-r, .boy.running .arm-l { animation: limbB .22s ease-in-out infinite alternate; }
+  .boy.running .hair { animation-duration: .35s; }
+  .boy.crouch svg { transform: scaleY(.55); transform-origin:50% 100%; }
+  @keyframes limbA { from { transform:rotate(-28deg); } to { transform:rotate(28deg); } }
+  @keyframes limbB { from { transform:rotate(28deg); } to { transform:rotate(-28deg); } }
+  @keyframes hairSway { from { transform:skewX(-5deg); } to { transform:skewX(5deg); } }
   /* Small version tag in the bottom-left corner: bump it with every update */
   .ver-tag { position:fixed; left:6px; bottom:4px; z-index:11; font-size:11px; color:rgba(255,255,255,.55);
              pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,.6); }
@@ -190,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.11</div>
+  <div class="ver-tag">v1.12</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -771,6 +787,128 @@
     else { b.x = W + 60; b.y = rand(0, H); }
     setBugState(b, 'walk');
   }
+
+  // ---- The little boy: wanders, runs from ladybugs, then crouches in the grass until they leave ----
+  const BOY_SVG = `<svg viewBox="0 0 40 80">
+      <path class="hair" d="M11 16 Q4 34 7 56 Q8 64 4 72 Q12 68 14 60 L26 60 Q28 68 36 72 Q32 64 33 56 Q36 34 29 16 Z" fill="#6b3f1f"/>
+      <g class="leg-l"><rect x="13" y="50" width="6" height="19" rx="2.5" fill="#2e3f66"/><rect x="11.5" y="68" width="8" height="5" rx="2" fill="#141414"/></g>
+      <g class="leg-r"><rect x="21" y="50" width="6" height="19" rx="2.5" fill="#2e3f66"/><rect x="20.5" y="68" width="8" height="5" rx="2" fill="#141414"/></g>
+      <g class="arm-l"><rect x="7" y="29" width="5" height="19" rx="2.5" fill="#d62828"/><rect x="7" y="34" width="5" height="1.6" fill="#fff"/><rect x="7" y="41" width="5" height="1.6" fill="#fff"/></g>
+      <g class="arm-r"><rect x="28" y="29" width="5" height="19" rx="2.5" fill="#d62828"/><rect x="28" y="34" width="5" height="1.6" fill="#fff"/><rect x="28" y="41" width="5" height="1.6" fill="#fff"/></g>
+      <clipPath id="boySweater"><path d="M11 27 Q20 23 29 27 L31 52 Q20 55 9 52 Z"/></clipPath>
+      <g clip-path="url(#boySweater)">
+        <rect x="8" y="27" width="24" height="5" fill="#d62828"/><rect x="8" y="32" width="24" height="5" fill="#ffffff"/>
+        <rect x="8" y="37" width="24" height="5" fill="#d62828"/><rect x="8" y="42" width="24" height="5" fill="#ffffff"/>
+        <rect x="8" y="47" width="24" height="5" fill="#d62828"/>
+      </g>
+      <ellipse cx="20" cy="20" rx="7.5" ry="8" fill="#f2c9a0"/>
+      <g fill="none" stroke="#111" stroke-width="1.1">
+        <rect x="12.5" y="17" width="6.5" height="4.6" rx="1.6"/><rect x="21" y="17" width="6.5" height="4.6" rx="1.6"/>
+        <path d="M19 18.5 Q20 17.6 21 18.5"/>
+      </g>
+      <circle cx="15.7" cy="19.3" r="1" fill="#111"/><circle cx="24.2" cy="19.3" r="1" fill="#111"/>
+      <path d="M17 24.2 Q20 26 23 24.2" fill="none" stroke="#8a3b2b" stroke-width=".9" stroke-linecap="round"/>
+      <clipPath id="boyBeanie"><path d="M12 15 Q11.5 6 20 5.5 Q28.5 6 28 15 Z"/></clipPath>
+      <g clip-path="url(#boyBeanie)">
+        <rect x="10" y="5" width="20" height="2.2" fill="#d62828"/><rect x="10" y="7.2" width="20" height="2.2" fill="#ffffff"/>
+        <rect x="10" y="9.4" width="20" height="2.2" fill="#d62828"/><rect x="10" y="11.6" width="20" height="2.2" fill="#ffffff"/>
+        <rect x="10" y="13.8" width="20" height="2.2" fill="#d62828"/>
+      </g>
+      <path d="M12.5 15 Q20 12 27.5 15 L27 17 Q20 14.5 13 17 Z" fill="#6b3f1f"/>
+      <circle cx="20" cy="4.5" r="2.4" fill="#ffffff"/><circle cx="20" cy="4.5" r="1.2" fill="#d62828"/>
+    </svg>`;
+  const boyEl = document.createElement('div');
+  boyEl.className = 'boy';
+  boyEl.innerHTML = BOY_SVG;
+  bugsLayer.appendChild(boyEl);
+  const boy = {
+    el: boyEl, x: window.innerWidth / 2, y: window.innerHeight / 2,
+    tx: 0, ty: 0, dir: 1, state: 'wander', timer: 0, clear: 0
+  };
+  function pickBoyTarget() {
+    boy.tx = rand(40, window.innerWidth - 40);
+    boy.ty = rand(80, window.innerHeight - 40);
+  }
+  pickBoyTarget();
+  function nearestLadybug() {
+    let best = { d: Infinity, x: 0, y: 0 };
+    bugs.forEach(b => {
+      const d = Math.hypot(b.x - boy.x, b.y - boy.y);
+      if (d < best.d) best = { d, x: b.x, y: b.y };
+    });
+    return best;
+  }
+  function placeBoy() {
+    boy.el.style.left = boy.x + 'px';
+    boy.el.style.top = boy.y + 'px';
+    boy.el.style.transform = `translate(-50%,-100%) scaleX(${boy.dir})`;
+  }
+  function moveBoy(dt) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const near = nearestLadybug();
+    if (boy.state === 'hide') {
+      // Crouched in the grass, under the tufts. Comes back up after 3 seconds with no ladybugs nearby
+      boy.clear = near.d < 150 ? 0 : boy.clear + dt;
+      if (boy.clear > 3) {
+        boy.el.classList.remove('crouch');
+        bugsLayer.appendChild(boy.el);
+        boy.state = 'wander';
+        pickBoyTarget();
+      }
+      placeBoy();
+      return;
+    }
+    if (boy.state === 'run') {
+      // Run straight away from the nearest ladybug
+      const ax = boy.x - near.x, ay = boy.y - near.y, L = Math.hypot(ax, ay) || 1;
+      boy.x = Math.min(W - 20, Math.max(20, boy.x + ax / L * 170 * dt));
+      boy.y = Math.min(H - 20, Math.max(40, boy.y + ay / L * 170 * dt));
+      boy.dir = ax >= 0 ? 1 : -1;
+      boy.timer -= dt;
+      if (boy.timer <= 0) {
+        if (near.d < 160) {
+          // Still chased: dive into the grass and hide
+          boy.state = 'hide';
+          boy.clear = 0;
+          boy.el.classList.remove('running');
+          boy.el.classList.add('crouch');
+          antsLayer.appendChild(boy.el);
+        } else {
+          boy.state = 'wander';
+          boy.el.classList.remove('running');
+          pickBoyTarget();
+        }
+      }
+      placeBoy();
+      return;
+    }
+    // Wander toward a target, but start running when a ladybug gets close
+    if (near.d < 110) {
+      boy.state = 'run';
+      boy.timer = 1.2;
+      boy.el.classList.add('running');
+      placeBoy();
+      return;
+    }
+    const dx = boy.tx - boy.x, dy = boy.ty - boy.y, d = Math.hypot(dx, dy);
+    if (d < 6) {
+      pickBoyTarget();
+    } else {
+      const step = Math.min(d, 30 * dt);
+      boy.x += dx / d * step;
+      boy.y += dy / d * step;
+      boy.dir = dx >= 0 ? 1 : -1;
+    }
+    placeBoy();
+  }
+  let boyTs = performance.now();
+  function boyLoop(ts) {
+    const dt = Math.min(0.05, (ts - boyTs) / 1000);
+    boyTs = ts;
+    moveBoy(dt);
+    requestAnimationFrame(boyLoop);
+  }
+  requestAnimationFrame(boyLoop);
 
   function setScore(n) { score = n; scoreEl.textContent = score; }
 
