@@ -143,7 +143,7 @@
   <div class="banner" id="banner"><span>GAME OVER</span></div>
 
   <section class="lb">
-    <h2>Leaderboard</h2>
+    <h2>Today's Leaderboard</h2>
     <div class="lb-form" id="lb-form">
       <input id="lb-name" maxlength="12" placeholder="Your name">
       <button id="lb-save">Save score</button>
@@ -615,7 +615,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp
+    getFirestore, collection, doc, getDoc, setDoc, query, where, limit, getDocs, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   // Paste your Firebase web app config here (Project settings > Your apps).
@@ -641,13 +641,24 @@
   }
   if (!db) statusEl.textContent = 'Leaderboard is not set up yet.';
 
+  // Scores are grouped by day in Toronto time (Eastern), so the board resets at midnight
+  function todayKey() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    const get = t => parts.find(p => p.type === t).value;
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }
+
   async function loadBoard() {
     if (!db) return;
     try {
-      const snap = await getDocs(query(collection(db, 'scores'), orderBy('score', 'desc'), limit(10)));
+      const day = todayKey();
+      // Single-field filter only, so no composite index is needed; sorting happens here
+      const snap = await getDocs(query(collection(db, 'scores'), where('day', '==', day), limit(200)));
+      const rows = snap.docs.map(d => d.data()).sort((a, b) => b.score - a.score).slice(0, 10);
       listEl.innerHTML = '';
-      snap.forEach(d => {
-        const v = d.data();
+      rows.forEach(v => {
         const li = document.createElement('li');
         const name = document.createElement('span');
         name.textContent = v.name;               // textContent avoids injecting HTML
@@ -656,6 +667,7 @@
         li.append(name, pts);
         listEl.appendChild(li);
       });
+      if (!rows.length) statusEl.textContent = 'No scores yet today. Be the first!';
     } catch (e) {
       statusEl.textContent = 'Could not load the leaderboard.';
     }
@@ -673,11 +685,23 @@
   });
 
   saveBtn.addEventListener('click', async () => {
-    const name = nameEl.value.trim().slice(0, 12);
+    const name = nameEl.value.trim();
     if (!name) { statusEl.textContent = 'Please enter a name.'; return; }
+    if (!/^[A-Za-z0-9 _-]{1,12}$/.test(name)) {
+      statusEl.textContent = 'Use 1-12 letters, numbers, spaces, _ or -.';
+      return;
+    }
+    // One entry per name per day: the document ID is the day plus the lowercase name
+    const day = todayKey();
+    const ref = doc(db, 'scores', `${day}__${name.toLowerCase()}`);
     saveBtn.disabled = true;
     try {
-      await addDoc(collection(db, 'scores'), { name, score: pendingScore, createdAt: serverTimestamp() });
+      const existing = await getDoc(ref);
+      if (existing.exists()) {
+        statusEl.textContent = `"${name}" is already taken today. Try another name.`;
+        return;
+      }
+      await setDoc(ref, { name, score: pendingScore, day, createdAt: serverTimestamp() });
       formEl.style.display = 'none';
       statusEl.textContent = 'Saved!';
       pendingScore = null;
