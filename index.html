@@ -362,7 +362,7 @@
       el,
       x: rand(0, window.innerWidth), y: rand(0, window.innerHeight),
       tx: rand(0, window.innerWidth), ty: rand(0, window.innerHeight),
-      speed: rand(25, 60), angle: 0, cluster: null
+      speed: rand(25, 60), angle: 0, cluster: null, seek: null, huntTimer: rand(0, 6)
     });
   }
 
@@ -372,28 +372,33 @@
     lastTs = ts;
     const W = window.innerWidth, H = window.innerHeight;
     ants.forEach(a => {
-      const c = a.cluster;
-      if (c && ts >= c.until) {
-        // Cluster is over: scatter outward from the ladybug and go back to roaming
-        const ang = rand(0, Math.PI * 2), r = rand(40, 90);
-        a.tx = c.bug.x + Math.cos(ang) * r; a.ty = c.bug.y + Math.sin(ang) * r;
-        a.cluster = null;
-        antsLayer.appendChild(a.el);
-      }
-      let tx = a.tx, ty = a.ty, speed = a.speed;
       if (a.cluster) {
-        // Clustered ants hug the ladybug and keep up with it
-        tx = a.cluster.bug.x + a.cluster.ox; ty = a.cluster.bug.y + a.cluster.oy;
-        speed = 160;
-      }
-      const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
-      if (!a.cluster && dist < 4) {
-        a.tx = rand(0, W); a.ty = rand(0, H);
-      } else if (dist > 0.5) {
-        const step = Math.min(dist, speed * dt);
-        a.x += dx / dist * step;
-        a.y += dy / dist * step;
-        a.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        // Attached ants hold on to their ladybug and move with it
+        const b = a.cluster.bug;
+        moveAnt(a, b.x + a.cluster.ox, b.y + a.cluster.oy, 320, dt);
+      } else if (a.seek) {
+        // Walking toward a ladybug to hop on
+        const b = a.seek;
+        if (!canTakeRider(b)) {
+          a.seek = null;
+        } else if (Math.hypot(b.x - a.x, b.y - a.y) < 10) {
+          attachAnt(a, b);
+        } else {
+          moveAnt(a, b.x, b.y, 90, dt);
+        }
+      } else {
+        // Roaming; now and then an ant decides to hunt the nearest ladybug
+        a.huntTimer -= dt;
+        if (a.huntTimer <= 0) {
+          a.huntTimer = rand(4, 8);
+          a.seek = nearestBug(a);
+        }
+        const dx = a.tx - a.x, dy = a.ty - a.y, dist = Math.hypot(dx, dy);
+        if (dist < 4) {
+          a.tx = rand(0, W); a.ty = rand(0, H);
+        } else {
+          moveAnt(a, a.tx, a.ty, a.speed, dt);
+        }
       }
       a.el.style.left = a.x + 'px';
       a.el.style.top = a.y + 'px';
@@ -421,14 +426,19 @@
     const W = window.innerWidth, H = window.innerHeight;
     b.state = state;
     b.el.classList.toggle('walking', state === 'walk');
-    b.el.classList.toggle('flying', state === 'fly');
+    b.el.classList.toggle('flying', state === 'fly' || state === 'exit');
     if (state === 'walk') {
       b.speed = rand(25, 45);
       b.timer = rand(3, 6);                  // seconds of walking before it takes off
       b.tx = rand(0, W); b.ty = rand(0, H);
-    } else if (state === 'fly') {
-      b.speed = rand(180, 260);
-      b.tx = rand(0, W); b.ty = rand(0, H);
+    } else if (state === 'fly' || state === 'exit') {
+      b.speed = state === 'exit' ? 240 : rand(180, 260);
+      if (state === 'exit') {
+        releaseRiders(b);                    // riders drop off as it takes off
+        pickEdge(b, W, H);
+      } else {
+        b.tx = rand(0, W); b.ty = rand(0, H);
+      }
       // Flight heading wanders: it turns in random bursts while easing toward the target
       b.heading = Math.atan2(b.ty - b.y, b.tx - b.x) * 180 / Math.PI;
       b.turnRate = 0; b.turnTimer = 0;
@@ -444,7 +454,7 @@
     el.className = 'bug';
     el.innerHTML = BUG_SVG;
     bugsLayer.appendChild(el);
-    const b = { el, x: rand(0, window.innerWidth), y: rand(0, window.innerHeight), tx: 0, ty: 0, speed: 0, angle: 0, state: 'walk', timer: 0 };
+    const b = { el, x: rand(0, window.innerWidth), y: rand(0, window.innerHeight), tx: 0, ty: 0, speed: 0, angle: 0, state: 'walk', timer: 0, riders: 0 };
     setBugState(b, 'walk');
     bugs.push(b);
   }
@@ -455,24 +465,32 @@
     bugTs = ts;
     const W = window.innerWidth, H = window.innerHeight;
     bugs.forEach(b => {
+      const full = b.riders >= 10;
+      // Each rider slows the ladybug down
+      const slow = Math.max(0.15, 1 - 0.085 * b.riders);
+      const airborne = bugs.filter(o => o.state === 'fly' || o.state === 'exit').length;
       if (b.state === 'rest') {
         b.timer -= dt;
-        if (b.timer <= 0) setBugState(b, 'walk');
+        if (full && airborne < 2) setBugState(b, 'exit');
+        else if (!full && b.timer <= 0) setBugState(b, 'walk');
       } else {
         const dx = b.tx - b.x, dy = b.ty - b.y, dist = Math.hypot(dx, dy);
         if (b.state === 'walk') {
           b.timer -= dt;
           if (dist < 4) { b.tx = rand(0, W); b.ty = rand(0, H); }
-          else moveBug(b, dx, dy, dist, dt);
-          // At most two ladybugs in the air at once; the rest keep walking and try again shortly
-          if (b.timer <= 0) {
-            if (bugs.filter(o => o.state === 'fly').length < 2) setBugState(b, 'fly');
-            else b.timer = rand(1, 2);
+          else moveBug(b, dx, dy, dist, dt * slow);
+          // Full, or time to fly: take off. Only two ladybugs in the air at once; the rest wait a moment
+          if (full || b.timer <= 0) {
+            if (airborne < 2) setBugState(b, full ? 'exit' : 'fly');
+            else if (!full) b.timer = rand(1, 2);
           }
-        } else if (dist < 6) {
-          setBugState(b, 'rest');                // landed
+        } else if (b.state === 'fly') {
+          if (dist < 6) setBugState(b, 'rest');  // landed
+          else flyBug(b, dx, dy, dist, dt);
         } else {
-          flyBug(b, dx, dy, dist, dt);
+          // Leaving: fly toward the edge, then come back in from another edge
+          if (dist < 30) departBug(b);
+          else flyBug(b, dx, dy, dist, dt);
         }
       }
       b.el.style.left = b.x + 'px';
@@ -507,30 +525,62 @@
   }
   requestAnimationFrame(bugLoop);
 
-  // Every so often, ten ants swarm one ladybug for five seconds, then disperse
-  function startAntCluster() {
-    const candidates = bugs.filter(b => b.state !== 'fly');
-    const free = ants.filter(a => !a.cluster);
-    if (!candidates.length || free.length < 10) return;
-    const bug = candidates[Math.floor(Math.random() * candidates.length)];
-    // Pick 10 random free ants
-    for (let i = 0; i < 10; i++) {
-      const j = i + Math.floor(Math.random() * (free.length - i));
-      [free[i], free[j]] = [free[j], free[i]];
-    }
-    const until = performance.now() + 5000;
-    for (let i = 0; i < 10; i++) {
-      const a = free[i];
-      const ang = (i / 10) * Math.PI * 2 + rand(-0.2, 0.2);
-      const r = rand(8, 20);
-      a.cluster = { bug, ox: Math.cos(ang) * r, oy: Math.sin(ang) * r, until };
-      bugsLayer.appendChild(a.el);   // draw the ants on top of the ladybug
-    }
+  // ---- Ants hopping onto ladybugs ----
+  // A ladybug takes up to ten riders. Each rider slows it down. At ten it flies away and the riders drop off.
+  function canTakeRider(b) {
+    return (b.state === 'walk' || b.state === 'rest') && b.riders < 10;
   }
-  function scheduleAntCluster() {
-    setTimeout(() => { startAntCluster(); scheduleAntCluster(); }, rand(15000, 25000));
+  function nearestBug(a) {
+    let best = null, bestD = 300;
+    bugs.forEach(b => {
+      if (!canTakeRider(b)) return;
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d < bestD) { bestD = d; best = b; }
+    });
+    return best;
   }
-  scheduleAntCluster();
+  function attachAnt(a, b) {
+    const ang = rand(0, Math.PI * 2), r = rand(8, 18);
+    a.seek = null;
+    a.cluster = { bug: b, ox: Math.cos(ang) * r, oy: Math.sin(ang) * r };
+    b.riders++;
+    bugsLayer.appendChild(a.el);       // draw riding ants on top of the ladybug
+  }
+  function releaseRiders(b) {
+    ants.forEach(a => {
+      if (!a.cluster || a.cluster.bug !== b) return;
+      const ang = rand(0, Math.PI * 2), r = rand(30, 70);
+      a.tx = b.x + Math.cos(ang) * r; a.ty = b.y + Math.sin(ang) * r;
+      a.cluster = null;
+      antsLayer.appendChild(a.el);
+    });
+    b.riders = 0;
+  }
+  function moveAnt(a, tx, ty, speed, dt) {
+    const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
+    if (dist < 0.5) return;
+    const step = Math.min(dist, speed * dt);
+    a.x += dx / dist * step;
+    a.y += dy / dist * step;
+    a.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  }
+  // A full ladybug flies off the nearest edge, then re-enters from another edge
+  function pickEdge(b, W, H) {
+    const side = Math.floor(Math.random() * 4);
+    if (side === 0) { b.tx = rand(0, W); b.ty = -80; }
+    else if (side === 1) { b.tx = rand(0, W); b.ty = H + 80; }
+    else if (side === 2) { b.tx = -80; b.ty = rand(0, H); }
+    else { b.tx = W + 80; b.ty = rand(0, H); }
+  }
+  function departBug(b) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const side = Math.floor(Math.random() * 4);
+    if (side === 0) { b.x = rand(0, W); b.y = -60; }
+    else if (side === 1) { b.x = rand(0, W); b.y = H + 60; }
+    else if (side === 2) { b.x = -60; b.y = rand(0, H); }
+    else { b.x = W + 60; b.y = rand(0, H); }
+    setBugState(b, 'walk');
+  }
 
   function setScore(n) { score = n; scoreEl.textContent = score; }
 
