@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.15</div>
+  <div class="ver-tag">v1.16</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -362,15 +362,17 @@
     const count = Math.min(2000, Math.round(W * H / 280));
     for (let i = 0; i < count; i++) {
       const x = trand(0, W), y = trand(0, H);
+      // About one tuft in seven is twice as tall
+      const tall = tuftRandom() < 0.15 ? 2 : 1;
       // A tuft's blades reach about 17px to each side and 26px up from its base
-      if (blocked.some(b => x + 17 > b.l && x - 17 < b.r && y > b.t && y - 26 < b.b)) continue;
+      if (blocked.some(b => x + 17 * tall > b.l && x - 17 * tall < b.r && y > b.t && y - 26 * tall < b.b)) continue;
       const t = document.createElement('div');
       t.className = 'tuft';
       const color = GREENS[Math.floor(tuftRandom() * GREENS.length)];
       t.innerHTML = `<svg viewBox="0 0 40 30" width="100%" height="100%" style="color:${color}"><use href="#tuftSym"/></svg>`;
       t.style.left = x + 'px';
       t.style.top = y + 'px';
-      t.style.transform = `translate(-50%,-100%) rotate(${trand(-25, 25)}deg) scale(${trand(0.6, 1.2)})`;
+      t.style.transform = `translate(-50%,-100%) rotate(${trand(-25, 25)}deg) scale(${(trand(0.6, 1.2) * tall).toFixed(2)})`;
       tuftsLayer.appendChild(t);
     }
   }
