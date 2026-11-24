@@ -267,7 +267,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.29</div>
+  <div class="ver-tag">v1.30</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -322,8 +322,9 @@
       <linearGradient id="cylG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".5"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".5" stop-color="#ffe9c4" stop-opacity=".12"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient>
     </defs>
     <image href="rock.webp" x="0" y="0" width="400" height="1000" preserveAspectRatio="none"/>
-    <!-- The wall stands in a half-cylinder hollow: its base dips in the middle, so the floor is a semicircle -->
-    <path d="M0 640 Q200 960 400 640 L400 1000 L0 1000 Z" fill="url(#floorG)"/>
+    <!-- The wall stands in a half-cylinder hollow: its base is an arc that is highest in the middle -->
+    <path d="M0 760 A200 160 0 0 1 400 760 L400 1000 L0 1000 Z" fill="url(#floorG)"/>
+    <path d="M0 760 A200 160 0 0 1 400 760" fill="none" stroke="#2a221c" stroke-width="4"/>
     <rect width="400" height="1000" fill="url(#cylG)"/>
     <g fill="#8a7e72" opacity=".25">
       <ellipse cx="60" cy="150" rx="55" ry="24"/><ellipse cx="330" cy="290" rx="48" ry="20"/>
@@ -338,9 +339,14 @@
     <g fill="none" stroke="#9c9186" stroke-width="1.5" opacity=".5" stroke-linecap="round">
       <path d="M126 96 L142 170"/><path d="M286 160 L300 232"/><path d="M240 580 L256 650"/>
     </g>
-    <ellipse cx="70" cy="950" rx="70" ry="46" fill="url(#boulderG)"/>
-    <ellipse cx="210" cy="975" rx="92" ry="52" fill="url(#boulderG)"/>
-    <ellipse cx="335" cy="940" rx="64" ry="44" fill="url(#boulderG)"/>
+    <ellipse cx="3.5" cy="725.0" rx="16" ry="11" fill="url(#boulderG)"/>
+    <ellipse cx="38.2" cy="661.0" rx="22" ry="14" fill="url(#boulderG)"/>
+    <ellipse cx="114.8" cy="610.2" rx="18" ry="12" fill="url(#boulderG)"/>
+    <ellipse cx="200.0" cy="595.0" rx="26" ry="16" fill="url(#boulderG)"/>
+    <ellipse cx="285.2" cy="610.2" rx="20" ry="13" fill="url(#boulderG)"/>
+    <ellipse cx="361.8" cy="661.0" rx="24" ry="15" fill="url(#boulderG)"/>
+    <ellipse cx="396.5" cy="725.0" rx="15" ry="10" fill="url(#boulderG)"/>
+
   </svg>
   <div class="s2-crit" id="s2-crit"></div>
   <div class="s2-tufts" id="s2-tufts"></div>
