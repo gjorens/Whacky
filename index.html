@@ -182,7 +182,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.4</div>
+  <div class="ver-tag">v1.5</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -490,7 +490,8 @@
     } else if (state === 'fly' || state === 'exit') {
       b.speed = state === 'exit' ? 240 : rand(180, 260);
       if (state === 'exit') {
-        releaseRiders(b);                    // riders drop off as it takes off
+        // It takes off with a random 0 to 3 riders still stuck on; the rest drop off
+        releaseRiders(b, false, Math.floor(Math.random() * 4));
         pickEdge(b, W, H);
       } else {
         b.tx = rand(0, W); b.ty = rand(0, H);
@@ -614,10 +615,14 @@
     b.riders++;
     bugsLayer.appendChild(a.el);       // draw riding ants on top of the ladybug
   }
-  function releaseRiders(b, scare) {
+  // Detaches riders from a ladybug. The first `keep` riders stay on (used when it takes off)
+  function releaseRiders(b, scare, keep = 0) {
     const now = performance.now();
+    let seen = 0;
     ants.forEach(a => {
       if (!a.cluster || a.cluster.bug !== b) return;
+      seen++;
+      if (seen <= keep) return;
       a.cluster = null;
       antsLayer.appendChild(a.el);
       if (scare) {
@@ -630,7 +635,7 @@
         a.tx = b.x + Math.cos(ang) * r; a.ty = b.y + Math.sin(ang) * r;
       }
     });
-    b.riders = 0;
+    b.riders = Math.min(seen, keep);
   }
   // A point further away from the ladybug that scared this ant
   // Always a point ahead of the ant, pointing away from the ladybug, so it keeps moving
@@ -660,6 +665,7 @@
     else { b.tx = W + 80; b.ty = rand(0, H); }
   }
   function departBug(b) {
+    releaseRiders(b, false);             // any riders still on drop off before it re-enters
     const W = window.innerWidth, H = window.innerHeight;
     const side = Math.floor(Math.random() * 4);
     if (side === 0) { b.x = rand(0, W); b.y = -60; }
