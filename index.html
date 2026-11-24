@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.13</div>
+  <div class="ver-tag">v1.14</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -673,6 +673,19 @@
     bugTs = ts;
     const W = window.innerWidth, H = window.innerHeight;
     bugs.forEach(b => {
+      // Ladybugs near Waldo walk over to bite him. A bite makes him run
+      const waldoNear = boy.state !== 'hide' && Math.hypot(boy.x - b.x, boy.y - b.y) < 250;
+      if (waldoNear && (b.state === 'walk' || b.state === 'rest') && b.riders < 10 && !(b.flutterTimer > 0)) {
+        if (b.state === 'rest') setBugState(b, 'walk');
+        b.tx = boy.x; b.ty = boy.y;
+        b.speed = 55;
+        b.timer = Math.max(b.timer, 1.5);  // keep chasing; don't take off or settle down yet
+        if (Math.hypot(boy.x - b.x, boy.y - b.y) < 22 && boy.state !== 'run') {
+          boy.state = 'run';
+          boy.timer = 1.6;
+          boy.el.classList.add('running');
+        }
+      }
       // Flutter wears down: a flutter lasts a second, then the bug can walk again
       if (b.flutterTimer > 0) {
         b.flutterTimer -= dt;
