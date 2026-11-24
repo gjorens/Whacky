@@ -22,16 +22,32 @@
   .mole { position:absolute; left:15%; right:15%; top:15%; bottom:-10%; border-radius:50%;
           background:radial-gradient(circle at 35% 30%, #e2a874, var(--mole) 60%, #8a5a33);
           transform:translateY(120%); transition:transform .12s ease-out; z-index:1; }
+  .mole.blue { background:radial-gradient(circle at 35% 30%, #9fd8ff, #3a7bd5 60%, #1d4f99); }
   .mole.up { transform:translateY(0); }
   .mole.whacked { transform:translateY(120%) scale(.8); }
   .mole::before, .mole::after { content:""; position:absolute; width:12%; height:12%; background:#2b1d12; border-radius:50%; top:38%; }
   .mole::before { left:28%; } .mole::after { right:28%; }
   .mole .nose { position:absolute; left:46%; right:46%; top:50%; height:14%; background:#5a2e1c; border-radius:50%; }
+  .mole.blue .nose { background:#16335e; }
   .hit-text { position:absolute; left:50%; top:20%; transform:translate(-50%,0); font-weight:bold; color:var(--accent);
               pointer-events:none; animation:float .6s ease-out forwards; z-index:3; font-size:1.2rem; }
   @keyframes float { to { transform:translate(-50%,-40px); opacity:0; } }
   .hole.miss { animation:shake .2s; }
   @keyframes shake { 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+
+  /* Game Over banner: slams in, then melts downward */
+  .banner { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+            pointer-events:none; z-index:10; }
+  .banner span { font-size:clamp(2.5rem, 12vw, 5rem); font-weight:900; color:#ff4d4d; letter-spacing:3px;
+                 text-shadow:0 5px 0 #7a0000, 0 0 24px rgba(0,0,0,.6); opacity:0; display:inline-block; }
+  .banner.show span { animation: slam .4s ease-out forwards, melt 2.6s ease-in 1.2s forwards; }
+  @keyframes slam { from { opacity:0; transform:scale(2); } to { opacity:1; transform:scale(1); } }
+  @keyframes melt {
+    0%   { opacity:1; transform:scaleY(1) translateY(0); filter:blur(0); }
+    40%  { transform:scaleY(.95) translateY(8px); }
+    100% { opacity:0; transform:scaleY(.1) translateY(160px) skewX(6deg); filter:blur(5px); }
+  }
+
   button { margin-top:18px; padding:12px 28px; font-size:1.1rem; border:none; border-radius:999px; cursor:pointer;
            background:var(--accent); color:#2b1d12; font-weight:700; box-shadow:0 4px 0 #b8923e; }
   button:active { transform:translateY(2px); box-shadow:0 2px 0 #b8923e; }
@@ -47,22 +63,27 @@
   </div>
   <div class="board" id="board"></div>
   <button id="startBtn">Start Game</button>
-  <div class="msg" id="msg">Click the moles before they hide! Misses cost you 1 point.</div>
+  <div class="msg" id="msg">Click the moles before they hide! Misses cost you 1 point. Watch out for blue moles!</div>
+  <div class="banner" id="banner"><span>GAME OVER</span></div>
 
 <script>
 (function () {
   const GAME_TIME = 30;
   const HOLES = 9;
+  const BLUE_CHANCE = 0.08;   // chance a pop is a blue mole
+  const BLUE_AFTER = 5;       // seconds before blue moles can appear
   const boardEl = document.getElementById('board');
   const scoreEl = document.getElementById('score');
   const timeEl = document.getElementById('time');
   const bestEl = document.getElementById('best');
   const startBtn = document.getElementById('startBtn');
   const msgEl = document.getElementById('msg');
+  const bannerEl = document.getElementById('banner');
 
   let score = 0, timeLeft = GAME_TIME, running = false;
   let spawnTimer = null, tickTimer = null;
   let best = 0;
+  let audioCtx = null;
   try { best = parseInt(localStorage.getItem('whackBest'), 10) || 0; } catch (e) {}
   bestEl.textContent = best;
 
@@ -79,7 +100,7 @@
     hole.appendChild(mole);
     hole.addEventListener('pointerdown', () => onWhack(i));
     boardEl.appendChild(hole);
-    holes.push({ hole, mole, hideTimer: null });
+    holes.push({ hole, mole, hideTimer: null, isBlue: false });
   }
 
   function setScore(n) { score = n; scoreEl.textContent = score; }
@@ -97,12 +118,16 @@
   function popMole() {
     if (!running) return;
     const { upTime, extra } = currentDifficulty();
+    const elapsed = GAME_TIME - timeLeft;
     const count = 1 + (extra && Math.random() < 0.3 ? 1 : 0);
     for (let c = 0; c < count; c++) {
       const idle = holes.map((h, i) => i).filter(i => !holes[i].mole.classList.contains('up'));
       if (!idle.length) break;
       const i = idle[Math.floor(Math.random() * idle.length)];
       const h = holes[i];
+      const isBlue = elapsed >= BLUE_AFTER && Math.random() < BLUE_CHANCE;
+      h.isBlue = isBlue;
+      h.mole.classList.toggle('blue', isBlue);
       h.mole.classList.remove('whacked');
       h.mole.classList.add('up');
       h.hideTimer = setTimeout(() => hide(i), upTime);
@@ -118,7 +143,14 @@
   function onWhack(i) {
     if (!running) return;
     const h = holes[i];
-    if (h.mole.classList.contains('up') && !h.mole.classList.contains('whacked')) {
+    const isUp = h.mole.classList.contains('up');
+    if (isUp && !h.mole.classList.contains('whacked') && h.isBlue) {
+      // Hit a blue mole: game over
+      h.mole.classList.add('whacked');
+      endGame(true);
+      return;
+    }
+    if (isUp && !h.mole.classList.contains('whacked')) {
       h.mole.classList.add('whacked');
       setScore(score + 1);
       floatText(h.hole, '+1');
@@ -151,36 +183,81 @@
     }, spawnDelay * (0.7 + Math.random() * 0.6));
   }
 
+  // Sad "wah-wah-wahhh" descending trombone, made with Web Audio (no files needed)
+  function playSadSound() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audioCtx = audioCtx || new Ctx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const t0 = audioCtx.currentTime + 0.05;
+      const notes = [
+        [392, 0.00, 0.45],
+        [370, 0.45, 0.45],
+        [349, 0.90, 0.45],
+        [330, 1.35, 1.30]
+      ];
+      notes.forEach(([freq, start, dur]) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t0 + start);
+        osc.frequency.linearRampToValueAtTime(freq * 0.9, t0 + start + dur);
+        gain.gain.setValueAtTime(0.0001, t0 + start);
+        gain.gain.exponentialRampToValueAtTime(0.25, t0 + start + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t0 + start);
+        osc.stop(t0 + start + dur + 0.05);
+      });
+    } catch (e) { /* audio unavailable; the game still works */ }
+  }
+
+  function showBanner() {
+    bannerEl.classList.remove('show');
+    void bannerEl.offsetWidth;   // restart the animation
+    bannerEl.classList.add('show');
+  }
+
   function startGame() {
     if (running) return;
     running = true;
     setScore(0);
     timeLeft = GAME_TIME;
     timeEl.textContent = timeLeft;
-    msgEl.textContent = 'Go!';
+    msgEl.textContent = 'Go! Watch for blue moles!';
+    bannerEl.classList.remove('show');
     startBtn.style.display = 'none';
     tickTimer = setInterval(() => {
       timeLeft--;
       timeEl.textContent = timeLeft;
-      if (timeLeft <= 0) endGame();
+      if (timeLeft <= 0) endGame(false);
     }, 1000);
     popMole();
     scheduleSpawn();
   }
 
-  function endGame() {
+  function endGame(overByBlueMole) {
     running = false;
     clearInterval(tickTimer);
     clearTimeout(spawnTimer);
     holes.forEach((h, i) => hide(i));
-    timeEl.textContent = 0;
-    if (score > best) {
+    const newBest = score > best;
+    if (newBest) {
       best = score;
       bestEl.textContent = best;
       try { localStorage.setItem('whackBest', String(best)); } catch (e) {}
-      msgEl.textContent = `New best! Final score: ${score}`;
+    }
+    if (overByBlueMole) {
+      timeEl.textContent = timeLeft;
+      showBanner();
+      playSadSound();
+      msgEl.textContent = `You whacked a blue mole! Final score: ${score}` + (newBest ? ' (New best!)' : '');
     } else {
-      msgEl.textContent = `Time's up! Final score: ${score}`;
+      timeEl.textContent = 0;
+      msgEl.textContent = newBest
+        ? `New best! Final score: ${score}`
+        : `Time's up! Final score: ${score}`;
     }
     startBtn.textContent = 'Play Again';
     startBtn.style.display = 'inline-block';
