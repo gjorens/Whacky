@@ -88,7 +88,7 @@
 
   /* Worm: sits on the ants layer, so the grass tufts cover it */
   .worm { position:absolute; width:70px; height:14px; transition: opacity .4s ease; }
-  .worm svg { display:block; width:100%; height:100%; overflow:visible; }
+  .worm svg { display:block; width:100%; height:100%; overflow:visible; transform-origin:100% 50%; }
   .worm ellipse { animation: wiggle 1s ease-in-out infinite alternate; }
   @keyframes wiggle { from { transform:translateY(-1.5px); } to { transform:translateY(1.5px); } }
   /* Dirt hole left where a worm burrows in or comes up */
@@ -190,7 +190,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.9</div>
+  <div class="ver-tag">v1.10</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -400,7 +400,9 @@
       el, x: rand(0, window.innerWidth), y: rand(0, window.innerHeight),
       heading: rand(0, Math.PI * 2), turn: 0, phase: rand(0, 10),
       burrowIn: rand(8, 16),           // seconds until it next burrows
-      burrowLeft: 0                    // seconds left underground (0 = above ground)
+      mode: 'out',                     // out | entering | under | emerging
+      len: 1,                          // share of the body showing (1 = full length)
+      underLeft: 0                     // seconds left underground
     });
   }
   // Leaves a dark hole in the grass, then fades it out after about 20 seconds
@@ -415,6 +417,7 @@
     setTimeout(() => h.remove(), 22000);
   }
   function placeWorm(w) {
+    w.el.firstElementChild.style.transform = `scaleX(${w.len})`;
     w.el.style.left = w.x + 'px';
     w.el.style.top = w.y + 'px';
     w.el.style.transform = `translate(-50%,-50%) rotate(${(w.heading + Math.sin(w.phase * 3) * 0.15) * 180 / Math.PI}deg)`;
@@ -423,26 +426,47 @@
   function moveWorm(w, dt) {
     const W = window.innerWidth, H = window.innerHeight;
     w.phase += dt;
-    if (w.burrowLeft > 0) {
-      // Underground: hidden while it gets ready to come up
-      w.burrowLeft -= dt;
-      if (w.burrowLeft <= 0) {
+    if (w.mode === 'entering') {
+      // Head first: the body shortens into the hole over about 0.8 seconds
+      w.len = Math.max(0, w.len - dt / 0.8);
+      if (w.len <= 0) {
+        w.mode = 'under';
+        w.underLeft = 5;                 // five seconds underground
+        w.el.style.opacity = '0';
+      }
+      placeWorm(w);
+      return;
+    }
+    if (w.mode === 'under') {
+      w.underLeft -= dt;
+      if (w.underLeft <= 0) {
         // Come up a short way off, in a random direction
         const ang = rand(0, Math.PI * 2), r = rand(60, 120);
         w.x = Math.min(W - 30, Math.max(30, w.x + Math.cos(ang) * r));
         w.y = Math.min(H - 30, Math.max(30, w.y + Math.sin(ang) * r));
-        makeWormHole(w.x, w.y);           // the way out
+        makeWormHole(w.x, w.y);          // the way out
+        w.mode = 'emerging';
+        w.len = 0;
         w.el.style.opacity = '1';
+      }
+      placeWorm(w);
+      return;
+    }
+    if (w.mode === 'emerging') {
+      // Head first: the body grows out over about a second
+      w.len = Math.min(1, w.len + dt / 1.0);
+      if (w.len >= 1) {
+        w.mode = 'out';
         w.burrowIn = rand(8, 16);
       }
       placeWorm(w);
       return;
     }
+    // Above ground: crawl and sway
     w.burrowIn -= dt;
     if (w.burrowIn <= 0) {
-      w.burrowLeft = rand(1.2, 2);
-      makeWormHole(w.x, w.y);             // the way in
-      w.el.style.opacity = '0';
+      w.mode = 'entering';
+      makeWormHole(w.x, w.y);            // the way in
       placeWorm(w);
       return;
     }
