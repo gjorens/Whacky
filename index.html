@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.14</div>
+  <div class="ver-tag">v1.15</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -873,7 +873,7 @@
   const boyEl = document.createElement('div');
   boyEl.className = 'boy';
   boyEl.innerHTML = BOY_SVG;
-  bugsLayer.appendChild(boyEl);
+  antsLayer.appendChild(boyEl);      // under the grass tufts, so he runs through them
   const boy = {
     el: boyEl, x: window.innerWidth / 2, y: window.innerHeight / 2,
     tx: 0, ty: 0, dir: 1, state: 'wander', timer: 0, clear: 0
@@ -904,7 +904,6 @@
       boy.clear = near.d < 150 ? 0 : boy.clear + dt;
       if (boy.clear > 3) {
         boy.el.classList.remove('crouch');
-        bugsLayer.appendChild(boy.el);
         boy.state = 'wander';
         pickBoyTarget();
       }
