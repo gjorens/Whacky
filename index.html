@@ -51,6 +51,9 @@
   button { margin-top:18px; padding:12px 28px; font-size:1.1rem; border:none; border-radius:999px; cursor:pointer;
            background:var(--accent); color:#2b1d12; font-weight:700; box-shadow:0 4px 0 #b8923e; }
   button:active { transform:translateY(2px); box-shadow:0 2px 0 #b8923e; }
+  .bonus { height:2.2rem; margin-bottom:6px; font-size:1.6rem; font-weight:900; color:var(--accent);
+           text-shadow:0 3px 0 #7a5a00; opacity:0; transform:translateY(8px); transition:opacity .3s, transform .3s; }
+  .bonus.show { opacity:1; transform:translateY(0); }
   .msg { margin-top:12px; min-height:1.4em; font-size:1rem; opacity:.9; text-align:center; }
 </style>
 </head>
@@ -61,6 +64,7 @@
     <div>Time <b id="time">30</b></div>
     <div>Best <b id="best">0</b></div>
   </div>
+  <div class="bonus" id="bonus">+5 BONUS! 10 hits in a row</div>
   <div class="board" id="board"></div>
   <button id="startBtn">Start Game</button>
   <div class="msg" id="msg">Click the moles before they hide! Misses cost you 1 point. Watch out for blue moles!</div>
@@ -84,6 +88,11 @@
   let spawnTimer = null, tickTimer = null;
   let best = 0;
   let audioCtx = null;
+  let streak = 0;            // consecutive normal-mole hits
+  let bonusTimer = null;
+  const STREAK_BONUS_AT = 10;
+  const STREAK_BONUS_POINTS = 5;
+  const bonusEl = document.getElementById('bonus');
   try { best = parseInt(localStorage.getItem('whackBest'), 10) || 0; } catch (e) {}
   bestEl.textContent = best;
 
@@ -154,15 +163,29 @@
       h.mole.classList.add('whacked');
       setScore(score + 1);
       floatText(h.hole, '+1');
+      streak++;
+      if (streak >= STREAK_BONUS_AT) {
+        setScore(score + STREAK_BONUS_POINTS);
+        showBonus();
+        streak = 0;
+      }
       clearTimeout(h.hideTimer);
       setTimeout(() => hide(i), 120);
     } else {
       setScore(score - 1);
+      streak = 0;
       h.hole.classList.remove('miss');
       void h.hole.offsetWidth;
       h.hole.classList.add('miss');
       floatText(h.hole, '-1', '#ff6b6b');
     }
+  }
+
+  // Shows the streak bonus above the board for 3 seconds
+  function showBonus() {
+    bonusEl.classList.add('show');
+    clearTimeout(bonusTimer);
+    bonusTimer = setTimeout(() => bonusEl.classList.remove('show'), 3000);
   }
 
   function floatText(parent, text, color) {
@@ -223,6 +246,9 @@
     if (running) return;
     running = true;
     setScore(0);
+    streak = 0;
+    clearTimeout(bonusTimer);
+    bonusEl.classList.remove('show');
     timeLeft = GAME_TIME;
     timeEl.textContent = timeLeft;
     msgEl.textContent = 'Go! Watch for blue moles!';
