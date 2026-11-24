@@ -802,7 +802,10 @@
       pendingScore = null;
       await loadBoard();
     } catch (err) {
-      statusEl.textContent = 'Could not save your score. Try again later.';
+      console.error(err);
+      statusEl.textContent = err.code === 'permission-denied'
+        ? 'Saving was blocked by the database rules. Publish the latest firestore.rules.'
+        : 'Could not save your score. Try again later.';
     } finally {
       saveBtn.disabled = false;
     }
