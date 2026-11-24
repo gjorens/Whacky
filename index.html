@@ -65,6 +65,15 @@
     100% { opacity:0; transform:scaleY(.1) translateY(160px) skewX(6deg); filter:blur(5px); }
   }
 
+  .lb { margin-top:22px; width:min(90vw, 360px); text-align:center; }
+  .lb h2 { margin:0 0 6px; font-size:1.3rem; color:var(--accent); }
+  .lb-form { display:none; gap:8px; justify-content:center; margin:6px 0; }
+  .lb-form input { padding:8px 14px; border-radius:999px; border:none; font-size:1rem; width:160px; }
+  .lb-form button { margin-top:0; padding:8px 18px; font-size:1rem; }
+  .lb-status { min-height:1.3em; font-size:.95rem; opacity:.9; }
+  .lb ol { list-style:none; padding:0; margin:6px 0 0; text-align:left; }
+  .lb li { display:flex; justify-content:space-between; padding:4px 10px; border-bottom:1px solid rgba(248,244,227,.15); }
+  .lb li b { color:var(--accent); }
   button { margin-top:18px; padding:12px 28px; font-size:1.1rem; border:none; border-radius:999px; cursor:pointer;
            background:var(--accent); color:#2b1d12; font-weight:700; box-shadow:0 4px 0 #b8923e; }
   button:active { transform:translateY(2px); box-shadow:0 2px 0 #b8923e; }
@@ -103,6 +112,16 @@
   <button id="startBtn">Start Game</button>
   <div class="msg" id="msg">Click the moles before they hide! Misses cost you 1 point. Watch out for blue moles!</div>
   <div class="banner" id="banner"><span>GAME OVER</span></div>
+
+  <section class="lb">
+    <h2>Leaderboard</h2>
+    <div class="lb-form" id="lb-form">
+      <input id="lb-name" maxlength="12" placeholder="Your name">
+      <button id="lb-save">Save score</button>
+    </div>
+    <div class="lb-status" id="lb-status"></div>
+    <ol id="lb-list"></ol>
+  </section>
 
 <script>
 (function () {
@@ -504,10 +523,92 @@
     }
     startBtn.textContent = 'Play Again';
     startBtn.style.display = 'inline-block';
+    // Lets the leaderboard script offer to save this score
+    window.dispatchEvent(new CustomEvent('whack-gameover', { detail: { score } }));
   }
 
   startBtn.addEventListener('click', startGame);
 })();
+</script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // Paste your Firebase web app config here (Project settings > Your apps).
+  // These values identify the project; they are not secret. Access is controlled by firestore.rules.
+  const firebaseConfig = {
+    apiKey: "REPLACE_ME",
+    authDomain: "REPLACE_ME",
+    projectId: "REPLACE_ME",
+    appId: "REPLACE_ME"
+  };
+
+  const formEl = document.getElementById('lb-form');
+  const nameEl = document.getElementById('lb-name');
+  const saveBtn = document.getElementById('lb-save');
+  const listEl = document.getElementById('lb-list');
+  const statusEl = document.getElementById('lb-status');
+  let pendingScore = null;
+
+  const configured = !firebaseConfig.projectId.startsWith('REPLACE');
+  let db = null;
+  if (configured) {
+    try { db = getFirestore(initializeApp(firebaseConfig)); } catch (e) { db = null; }
+  }
+  if (!db) statusEl.textContent = 'Leaderboard is not set up yet.';
+
+  async function loadBoard() {
+    if (!db) return;
+    try {
+      const snap = await getDocs(query(collection(db, 'scores'), orderBy('score', 'desc'), limit(10)));
+      listEl.innerHTML = '';
+      snap.forEach(d => {
+        const v = d.data();
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.textContent = v.name;               // textContent avoids injecting HTML
+        const pts = document.createElement('b');
+        pts.textContent = v.score;
+        li.append(name, pts);
+        listEl.appendChild(li);
+      });
+    } catch (e) {
+      statusEl.textContent = 'Could not load the leaderboard.';
+    }
+  }
+
+  window.addEventListener('whack-gameover', e => {
+    const score = e.detail.score;
+    if (!db) return;
+    if (score <= 0) { statusEl.textContent = 'Scores of 0 are not saved.'; return; }
+    pendingScore = score;
+    formEl.style.display = 'flex';
+    nameEl.value = '';
+    nameEl.focus();
+    statusEl.textContent = `Enter your name to save ${score} points:`;
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const name = nameEl.value.trim().slice(0, 12);
+    if (!name) { statusEl.textContent = 'Please enter a name.'; return; }
+    saveBtn.disabled = true;
+    try {
+      await addDoc(collection(db, 'scores'), { name, score: pendingScore, createdAt: serverTimestamp() });
+      formEl.style.display = 'none';
+      statusEl.textContent = 'Saved!';
+      pendingScore = null;
+      await loadBoard();
+    } catch (err) {
+      statusEl.textContent = 'Could not save your score. Try again later.';
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  loadBoard();
 </script>
 </body>
 </html>
