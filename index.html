@@ -450,7 +450,11 @@
           b.timer -= dt;
           if (dist < 4) { b.tx = rand(0, W); b.ty = rand(0, H); }
           else moveBug(b, dx, dy, dist, dt);
-          if (b.timer <= 0) setBugState(b, 'fly');
+          // At most two ladybugs in the air at once; the rest keep walking and try again shortly
+          if (b.timer <= 0) {
+            if (bugs.filter(o => o.state === 'fly').length < 2) setBugState(b, 'fly');
+            else b.timer = rand(1, 2);
+          }
         } else if (dist < 6) {
           setBugState(b, 'rest');                // landed
         } else {
