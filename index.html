@@ -72,6 +72,8 @@
   .thermo-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
   .acc-label { font-size:1.4rem; font-weight:800; color:var(--accent); min-width:3.5em; text-align:center; }
   .acc-title { font-size:.9rem; opacity:.85; }
+  .counts { font-size:.95rem; display:flex; gap:12px; }
+  .counts b { color:var(--accent); }
   .thermo { position:relative; width:34px; height:240px; border:3px solid var(--text); border-radius:17px;
             background:#15281d; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; }
   .thermo .fill { width:100%; height:100%; background:#3a7bd5; transition:height .3s ease, background-color .3s; }
@@ -92,9 +94,10 @@
   <div class="stage">
     <div class="board" id="board"></div>
     <div class="thermo-wrap">
-      <div class="acc-label" id="acc">100%</div>
       <div class="thermo"><div class="fill" id="fill"></div></div>
+      <div class="acc-label" id="acc">100%</div>
       <div class="acc-title">Accuracy</div>
+      <div class="counts"><span>Hits <b id="hits-count">0</b></span> <span>Misses <b id="misses-count">0</b></span></div>
     </div>
   </div>
   <button id="startBtn">Start Game</button>
@@ -116,6 +119,8 @@
   const bannerEl = document.getElementById('banner');
   const accEl = document.getElementById('acc');
   const fillEl = document.getElementById('fill');
+  const hitsEl = document.getElementById('hits-count');
+  const missesEl = document.getElementById('misses-count');
   const ACCURACY_GAME_OVER = 50;   // game ends at or below this percentage
   const ACCURACY_FULL = 80;        // blue at or above this; blends to red down to 50
   let hits = 0, misses = 0;
@@ -326,9 +331,13 @@
   function updateAccuracy() {
     const total = hits + misses;
     const pct = total ? Math.round(hits / total * 100) : 100;
+    const color = thermoColor(pct);
     accEl.textContent = pct + '%';
+    accEl.style.color = color;
     fillEl.style.height = Math.max(0, Math.min(100, pct)) + '%';
-    fillEl.style.background = thermoColor(pct);
+    fillEl.style.background = color;
+    hitsEl.textContent = hits;
+    missesEl.textContent = misses;
     return pct;
   }
 
