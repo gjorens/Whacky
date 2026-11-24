@@ -206,7 +206,7 @@
       </filter>
     </defs>
   </svg>
-  <div class="ver-tag">v1.17</div>
+  <div class="ver-tag">v1.18</div>
   <div class="screen-ants" id="ants"></div>
   <div class="screen-tufts" id="tufts"></div>
   <div class="screen-bugs" id="bugs"></div>
@@ -955,8 +955,8 @@
       placeBoy();
       return;
     }
-    // Wander toward a target, but start running when a ladybug gets close
-    if (near.d < 110) {
+    // Wander toward a target, and run once a ladybug is right on him (a bite)
+    if (near.d < 30) {
       boy.state = 'run';
       boy.timer = 1.2;
       boy.el.classList.add('running');
