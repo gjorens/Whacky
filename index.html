@@ -23,21 +23,13 @@
   .hole::after { content:""; position:absolute; left:12%; right:12%; bottom:0; height:22%; border-radius:50%;
                  background:var(--dirt); z-index:2; pointer-events:none; }
   .mole { position:absolute; left:15%; right:15%; top:15%; bottom:-10%; border-radius:50%;
-          background:
-            repeating-radial-gradient(circle at 40% 35%, rgba(70,35,10,.22) 0 1px, transparent 1px 4px),
-            radial-gradient(circle at 34% 28%, #f3c896 0%, var(--mole) 45%, #8a5a33 85%);
-          box-shadow: inset -10px -12px 18px rgba(60,30,10,.45), inset 8px 10px 14px rgba(255,235,200,.35), 0 8px 10px rgba(0,0,0,.55);
+          background:none;
           transform:translateY(120%); transition:transform .12s ease-out; z-index:1; }
-  .mole.blue { background:
-                 repeating-radial-gradient(circle at 40% 35%, rgba(10,30,70,.25) 0 1px, transparent 1px 4px),
-                 radial-gradient(circle at 34% 28%, #cfe9ff 0%, #3a7bd5 45%, #1d4f99 85%);
-               box-shadow: inset -10px -12px 18px rgba(5,20,50,.5), inset 8px 10px 14px rgba(200,230,255,.35), 0 8px 10px rgba(0,0,0,.55); }
+  /* Mole drawn as SVG: velvet fur texture, pink snout, tiny eyes, pale paws with claws */
+  .mole svg { display:block; overflow:visible; filter: drop-shadow(0 5px 4px rgba(0,0,0,.55)); }
+  .mole.blue .body { fill:url(#furBlue); }
   .mole.up { transform:translateY(0); }
   .mole.whacked { transform:translateY(120%) scale(.8); }
-  .mole::before, .mole::after { content:""; position:absolute; width:12%; height:12%; background:#2b1d12; border-radius:50%; top:38%; }
-  .mole::before { left:28%; } .mole::after { right:28%; }
-  .mole .nose { position:absolute; left:46%; right:46%; top:50%; height:14%; background:#5a2e1c; border-radius:50%; }
-  .mole.blue .nose { background:#16335e; }
   .hit-text { position:absolute; left:50%; top:20%; transform:translate(-50%,0); font-weight:bold; color:var(--accent);
               pointer-events:none; animation:float .6s ease-out forwards; z-index:3; font-size:1.2rem; }
   @keyframes float { to { transform:translate(-50%,-40px); opacity:0; } }
@@ -117,6 +109,35 @@
 </style>
 </head>
 <body>
+  <!-- Shared SVG definitions for the moles and grass -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <radialGradient id="furDark" cx="40%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#7a6356"/><stop offset=".55" stop-color="#4a3a31"/><stop offset="1" stop-color="#22180f"/>
+      </radialGradient>
+      <radialGradient id="furBlue" cx="40%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#a9d4ff"/><stop offset=".55" stop-color="#3a7bd5"/><stop offset="1" stop-color="#14305e"/>
+      </radialGradient>
+      <radialGradient id="snoutGrad" cx="40%" cy="35%" r="70%">
+        <stop offset="0" stop-color="#ffd3cf"/><stop offset=".6" stop-color="#e59b98"/><stop offset="1" stop-color="#a85f63"/>
+      </radialGradient>
+      <radialGradient id="pawGrad" cx="40%" cy="35%" r="70%">
+        <stop offset="0" stop-color="#fbe3d6"/><stop offset="1" stop-color="#d9a08f"/>
+      </radialGradient>
+      <filter id="furTex" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise"/>
+        <feColorMatrix in="noise" type="saturate" values="0" result="gray"/>
+        <feComponentTransfer in="gray" result="shade">
+          <feFuncR type="linear" slope=".5" intercept=".6"/>
+          <feFuncG type="linear" slope=".5" intercept=".6"/>
+          <feFuncB type="linear" slope=".5" intercept=".6"/>
+          <feFuncA type="linear" slope="0" intercept="1"/>
+        </feComponentTransfer>
+        <feBlend in="SourceGraphic" in2="shade" mode="multiply" result="textured"/>
+        <feComposite in="textured" in2="SourceGraphic" operator="in"/>
+      </filter>
+    </defs>
+  </svg>
   <div class="screen-ants" id="ants"></div>
   <h1>🔨 Whack-a-Mole</h1>
   <div class="hud">
@@ -190,6 +211,29 @@
   try { best = parseInt(localStorage.getItem('whackBest'), 10) || 0; } catch (e) {}
   bestEl.textContent = best;
 
+  // Mole artwork, drawn once and reused. Fur, velvet shading and paws are all SVG.
+  const MOLE_SVG = `
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMax meet" width="100%" height="100%">
+      <path class="body" d="M5 100 C1 54 22 10 50 10 C78 10 99 54 95 100 Z" fill="url(#furDark)" filter="url(#furTex)"/>
+      <ellipse cx="40" cy="26" rx="22" ry="9" fill="#ffffff" opacity=".10"/>
+      <g>
+        <ellipse cx="14" cy="80" rx="11" ry="9" fill="url(#pawGrad)"/>
+        <path d="M6 87 l-3 6 M10 89 l-2 7 M15 90 l0 7 M20 89 l2 7" stroke="#f3ece2" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+      <g>
+        <ellipse cx="86" cy="80" rx="11" ry="9" fill="url(#pawGrad)"/>
+        <path d="M94 87 l3 6 M90 89 l2 7 M85 90 l0 7 M80 89 l-2 7" stroke="#f3ece2" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+      <path d="M33 66 Q50 74 67 66 L63 76 Q50 82 37 76 Z" fill="url(#snoutGrad)" opacity=".0"/>
+      <ellipse cx="50" cy="60" rx="17" ry="13" fill="url(#snoutGrad)"/>
+      <ellipse cx="50" cy="51" rx="7.5" ry="5" fill="#8b4a4f"/>
+      <ellipse cx="47.6" cy="49.6" rx="2.4" ry="1.2" fill="#ffffff" opacity=".55"/>
+      <circle cx="33" cy="42" r="2.2" fill="#0c0806"/>
+      <circle cx="67" cy="42" r="2.2" fill="#0c0806"/>
+      <circle cx="33.7" cy="41.2" r=".7" fill="#ffffff" opacity=".7"/>
+      <circle cx="67.7" cy="41.2" r=".7" fill="#ffffff" opacity=".7"/>
+    </svg>`;
+
   // Build holes
   const holes = [];
   for (let i = 0; i < HOLES; i++) {
@@ -197,9 +241,7 @@
     hole.className = 'hole';
     const mole = document.createElement('div');
     mole.className = 'mole';
-    const nose = document.createElement('div');
-    nose.className = 'nose';
-    mole.appendChild(nose);
+    mole.innerHTML = MOLE_SVG;
     const hands = document.createElement('div');
     hands.className = 'hands';
     hands.innerHTML = '<i></i><i></i>';
@@ -220,7 +262,7 @@
   const ANT_SVG = `<svg viewBox="0 0 20 14" width="100%" height="100%"><g fill="#2a1a0e"><circle cx="16" cy="7" r="2.2"/><ellipse cx="10" cy="7" rx="2.6" ry="1.8"/><ellipse cx="4" cy="7" rx="3.4" ry="2.6"/></g><g stroke="#2a1a0e" stroke-width=".7"><path d="M9 7 L5 1 M9 7 L5 13 M10 7 L8 0 M10 7 L8 14 M11 7 L14 1 M11 7 L14 13"/></g></svg>`;
 
   // Grass tufts scattered over the field (sit above the ants, below the holes)
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 440; i++) {
     const t = document.createElement('div');
     t.className = 'tuft';
     t.innerHTML = TUFT_SVG(GREENS[Math.floor(Math.random() * GREENS.length)]);
@@ -643,6 +685,12 @@
   const statusEl = document.getElementById('lb-status');
   let pendingScore = null;
 
+  // Remember the player's name on this device so they don't have to retype it
+  function savedName() {
+    try { return localStorage.getItem('whackName') || ''; } catch (e) { return ''; }
+  }
+  nameEl.value = savedName();
+
   const configured = !firebaseConfig.projectId.startsWith('REPLACE');
   let db = null;
   if (configured) {
@@ -688,7 +736,7 @@
     if (score <= 0) { statusEl.textContent = 'Scores of 0 are not saved.'; return; }
     pendingScore = score;
     formEl.style.display = 'flex';
-    nameEl.value = '';
+    nameEl.value = savedName();
     nameEl.focus();
     statusEl.textContent = `Enter your name to save ${score} points:`;
   });
@@ -700,6 +748,7 @@
       statusEl.textContent = 'Use 1-12 letters, numbers, spaces, _ or -.';
       return;
     }
+    try { localStorage.setItem('whackName', name); } catch (e) {}
     // One entry per name per day: the document ID is the day plus the lowercase name
     const day = todayKey();
     const ref = doc(db, 'scores', `${day}__${name.toLowerCase()}`);
